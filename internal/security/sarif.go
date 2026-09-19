@@ -141,7 +141,7 @@ func ConvertAuditReportToSARIF(report AuditReport) SARIFReport {
 					Driver: SARIFDriver{
 						Name:           "SkillVault Security Audit",
 						Version:        version.Number,
-						InformationURI: "https://github.com/QuantumEdu/kbs",
+						InformationURI: "https://github.com/QuantumEdu/q-skillvault",
 						Rules:          rules,
 					},
 				},

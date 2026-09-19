@@ -6,7 +6,7 @@
 
 ## 0. Contexto y alcance
 
-Este documento especifica las mejoras derivadas del análisis de código del repositorio `QuantumEdu/kbs` (branch `feat/skillvault-v1-alpha`). El análisis identificó:
+Este documento especifica las mejoras derivadas del análisis de código del repositorio `QuantumEdu/q-skillvault` (branch `feat/skillvault-v1-alpha`). El análisis identificó:
 
 - 3 bugs críticos que afectan runtime y compilación
 - 4 advertencias estructurales
@@ -616,4 +616,4 @@ El vault se considera Production-Ready para workflows agénticos cuando:
 
 ---
 
-*Generado a partir del análisis técnico del repositorio `QuantumEdu/kbs` · 2026-06-22*
+*Generado a partir del análisis técnico del repositorio `QuantumEdu/q-skillvault` · 2026-06-22*

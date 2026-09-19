@@ -180,7 +180,22 @@ func RunUpdate() {
 		}
 	}
 	if repoPath == "" {
-		repoPath = "/home/ubuntu/dev/kbs"
+		if cwd, err := os.Getwd(); err == nil {
+			if info, err := os.Stat(filepath.Join(cwd, ".git")); err == nil && info.IsDir() {
+				repoPath = cwd
+			}
+		}
+	}
+	if repoPath == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			for _, candidate := range []string{"q-skillvault", "kbs"} {
+				p := filepath.Join(home, "dev", candidate)
+				if info, err := os.Stat(filepath.Join(p, ".git")); err == nil && info.IsDir() {
+					repoPath = p
+					break
+				}
+			}
+		}
 	}
 
 	// Resolve install path in order of priority:
@@ -195,7 +210,9 @@ func RunUpdate() {
 		}
 	}
 	if installPath == "" {
-		installPath = "/home/ubuntu/tools/skillvault"
+		if home, err := os.UserHomeDir(); err == nil {
+			installPath = filepath.Join(home, "tools", "skillvault")
+		}
 	}
 
 	// Step 1: Validate repo exists and is a git repo.

@@ -4,11 +4,14 @@
 
 ```bash
 # Prerequisites: Go 1.26+
-git clone https://github.com/QuantumEdu/kbs
-cd kbs
+git clone https://github.com/QuantumEdu/q-skillvault.git
+cd q-skillvault
 
-# Build (single binary, no CGO, ~7 MB)
-go build -ldflags="-s -w" -o ~/tools/skillvault ./cmd/skillvault
+# Build and install (single binary, no CGO, ~7 MB)
+make install
+
+# Or install the full suite (skillvault + line factory + telemetry + q-secrets)
+make install-all
 
 # Add ~/tools to your PATH if it's not there
 export PATH="$HOME/tools:$PATH"

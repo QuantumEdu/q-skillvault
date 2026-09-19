@@ -13,12 +13,12 @@ tool calls, token usage, quality signals, and agent lifecycle events to SQLite.
 
 ## Installation
 
-### From the kbs repo (any machine)
+### From the q-skillvault repo (any machine)
 
 ```bash
 # Clone the repo (first time only)
-git clone https://github.com/QuantumEdu/kbs.git
-cd kbs
+git clone https://github.com/QuantumEdu/q-skillvault.git
+cd q-skillvault
 git submodule update --init
 
 # One-shot install: all binaries to ~/tools/

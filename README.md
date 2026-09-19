@@ -1,8 +1,8 @@
-# SkillVault Qu@ntum
+# q-skillvault · Qu@ntum
 
 **Local-first knowledge operating system for developers and AI agents.**
 
-Store, search, and retrieve prompts, skills, workflows, decisions, project memory, session summaries, and long AI outputs from the SkillVault CLI in the broader kbs local-first tool suite.
+Store, search, and retrieve prompts, skills, workflows, decisions, project memory, session summaries, and long AI outputs from the SkillVault CLI in the broader local-first tool suite.
 
 ```
    _____ _ _    _  __     __          _          _
@@ -13,12 +13,15 @@ Store, search, and retrieve prompts, skills, workflows, decisions, project memor
  |_____/       |_|
 ```
 
+**Author:** Gabriel Magallon Sanchez - Qu@antum  
+**Repository:** [https://github.com/QuantumEdu/q-skillvault](https://github.com/QuantumEdu/q-skillvault)  
 **Codename:** Qu@ntum  
-**Status:** v3 — Workflow bridge + LifeOS taxonomy + workflow analytics + entry versioning + skill pack export  
+**Status:** v3 — Workflow bridge + LifeOS taxonomy + workflow analytics + entry versioning + skill pack export + issue-to-PR factory (`line`)  
 **Versioning:** Semantic Versioning `MAJOR.MINOR.PATCH` starting at `v3.0.0` — MINOR bumps per merged feature PR, PATCH per merged fix PR, MAJOR only on breaking changes. Single source of truth: `internal/version/version.go`.  
 **Binary size:** ~7 MB  
 **Dependencies:** Zero frameworks. Only `modernc.org/sqlite`.  
-**Language:** Go 1.26+
+**Language:** Go 1.26+  
+**License:** [MIT](LICENSE)
 
 ---
 
@@ -99,11 +102,14 @@ Generate implementation plan from spec.
 
 ```bash
 # Prerequisites: Go 1.26+
-git clone --recurse-submodules https://github.com/QuantumEdu/kbs
-cd kbs
+git clone --recurse-submodules https://github.com/QuantumEdu/q-skillvault.git
+cd q-skillvault
 
-# Build (single binary, no CGO)
-go build -o ~/tools/skillvault ./cmd/skillvault
+# Build and install core binary
+make install
+
+# Or install the full suite (skillvault + line factory + telemetry + q-secrets)
+make install-all
 
 # Initialize the vault
 skillvault init
@@ -112,7 +118,7 @@ skillvault init
 skillvault version
 ```
 
-That's it. One binary. No daemon, no database server, no frameworks.
+That's it. Single binary with zero CGO dependencies. No external database servers or heavy frameworks.
 
 > **Self-update**: Use `skillvault update` to rebuild and reinstall from source.
 > Configure the source repo with `SKILLVAULT_REPO` env var and target path with
@@ -300,11 +306,11 @@ q-secrets is a local encrypted secret manager that stores secrets in a SQLite da
 
 ### Installation
 
-q-secrets is included as a **git submodule** in the kbs repository. After cloning kbs, initialize the submodule:
+q-secrets is included as a **git submodule** in the q-skillvault repository. After cloning q-skillvault, initialize the submodule:
 
 ```bash
-# Clone kbs with submodules
-git clone --recurse-submodules https://github.com/QuantumEdu/kbs
+# Clone q-skillvault with submodules
+git clone --recurse-submodules https://github.com/QuantumEdu/q-skillvault.git
 
 # Or, if you already cloned without --recurse-submodules:
 git submodule update --init --recursive
@@ -312,7 +318,7 @@ git submodule update --init --recursive
 # Install both skillvault and q-secrets
 make install-all
 
-# Or install via kbs (recommended)
+# Or install via q-skillvault (recommended)
 skillvault init --with-secrets
 
 # Or install q-secrets separately
@@ -351,7 +357,7 @@ The `secrets` command resolves the q-secrets binary by checking, in order:
 
 1. `Q_SECRETS_BIN` environment variable (full path override)
 2. Same directory as the `skillvault` executable
-3. `q-secrets/q-secrets` relative to the kbs repository root (dev mode)
+3. `q-secrets/q-secrets` relative to the q-skillvault repository root (dev mode)
 4. `q-secrets` in `PATH`
 
 If the binary is not found, run `make install-q-secrets` or set `Q_SECRETS_BIN`.
@@ -359,7 +365,7 @@ If the binary is not found, run `make install-q-secrets` or set `Q_SECRETS_BIN`.
 ### Updates
 
 `skillvault update` will automatically rebuild and reinstall q-secrets if the
-`q-secrets/` directory exists in the kbs repository. Set `SKIP_Q_SECRETS=1` to
+`q-secrets/` directory exists in the q-skillvault repository. Set `SKIP_Q_SECRETS=1` to
 skip the q-secrets rebuild.
 
 ---
@@ -663,6 +669,8 @@ Test pyramid:
 
 ---
 
-## License
+## Author & License
 
-MIT
+**Author:** Gabriel Magallon Sanchez - Qu@antum  
+**Organization:** [QuantumEdu](https://github.com/QuantumEdu)  
+**License:** [MIT](LICENSE) — Copyright (c) 2026 Gabriel Magallon Sanchez - Qu@antum. All rights reserved.

@@ -741,13 +741,13 @@ skillvault update --repo /opt/kbs --install-path ~/tools/skillvault
 
 | Variable | Description |
 |----------|-------------|
-| `SKILLVAULT_REPO` | Path to the local git repo (default: `/home/ubuntu/dev/kbs`) |
+| `SKILLVAULT_REPO` | Path to the local git repo (default: `$HOME/dev/q-skillvault` or `$HOME/dev/kbs`) |
 | `SKILLVAULT_INSTALL_PATH` | Path where the rebuilt binary will be installed (default: current executable path) |
 
 **Resolution order** (first non-empty value wins):
 
-1. **Repo path**: `--repo` flag → `SKILLVAULT_REPO` env → parent of current executable if it is inside a `kbs` git repo → `/home/ubuntu/dev/kbs`
-2. **Install path**: `--install-path` flag → `SKILLVAULT_INSTALL_PATH` env → `os.Executable()` → `/home/ubuntu/tools/skillvault`
+1. **Repo path**: `--repo` flag → `SKILLVAULT_REPO` env → parent of current executable if it is inside a git repo → `$HOME/dev/q-skillvault`
+2. **Install path**: `--install-path` flag → `SKILLVAULT_INSTALL_PATH` env → `os.Executable()` → `$HOME/tools/skillvault`
 
 **Steps performed:**
 

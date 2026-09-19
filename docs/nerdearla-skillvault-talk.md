@@ -428,6 +428,6 @@ El núcleo permanece: *encontrar el conocimiento correcto antes de ejecutarlo*.
 skillvault setup && skillvault project start --name "TuProyecto"
 ```
 
-Repositorio: `github.com/QuantumEdu/kbs` · Documentación en `docs/`
+Repositorio: `github.com/QuantumEdu/q-skillvault` · Documentación en `docs/`
 
 **Preguntas**

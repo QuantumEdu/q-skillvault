@@ -15,7 +15,7 @@ func TestProjectStoreCRUD(t *testing.T) {
 	p1 := Project{
 		ID:          "pos-app",
 		Name:        "Sistema POS",
-		RepoPath:    "/home/ubuntu/dev/pos-app",
+		RepoPath:    "/repos/pos-app",
 		DefaultExec: "claude",
 		ReviewExec:  "claude-review",
 		NtfyTopic:   "pos-alerts",
@@ -38,7 +38,7 @@ func TestProjectStoreCRUD(t *testing.T) {
 	p2 := Project{
 		ID:          "kbs",
 		Name:        "Knowledge Base",
-		RepoPath:    "/home/ubuntu/dev/kbs",
+		RepoPath:    "/repos/q-skillvault",
 		DefaultExec: "claude",
 		CreatedAt:   time.Now().UTC(),
 		UpdatedAt:   time.Now().UTC(),

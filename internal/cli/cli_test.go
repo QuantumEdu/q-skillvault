@@ -1170,8 +1170,8 @@ func TestParseUpdateFlags(t *testing.T) {
 		},
 		{
 			name: "with install-path flag",
-			args: []string{"skillvault", "update", "--install-path", "/home/ubuntu/tools/skillvault"},
-			want: UpdateFlags{InstallPath: "/home/ubuntu/tools/skillvault"},
+			args: []string{"skillvault", "update", "--install-path", "/opt/tools/skillvault"},
+			want: UpdateFlags{InstallPath: "/opt/tools/skillvault"},
 		},
 		{
 			name: "both flags",

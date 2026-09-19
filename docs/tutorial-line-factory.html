@@ -813,7 +813,7 @@ Necesitamos operar localmente ante caídas de red y emitir tickets ESC/POS.
 
       <div class="code-header"><span>1. Lanzamiento del Factory</span><span>bash</span></div>
       <pre><code><span class="badge badge-terminal">terminal</span>
-line run   --repo /home/ubuntu/dev/pos-app   --auto   --review-exec claude   --review-exec-arg --temperature=0.1   --ntfy-topic line-pos-alerts   https://github.com/QuantumEdu/pos-app/issues/101</code></pre>
+line run   --repo $HOME/dev/pos-app   --auto   --review-exec claude   --review-exec-arg --temperature=0.1   --ntfy-topic line-pos-alerts   https://github.com/QuantumEdu/pos-app/issues/101</code></pre>
 
       <div class="card card-accent" style="margin: 1.5rem 0;">
         <h4 style="color:#fff; margin-bottom: 0.5rem;">Salida en tiempo real del CLI:</h4>
@@ -834,7 +834,7 @@ line continue --answer "Vienen con IVA incluido, calcular el desglose: base = pr
         <h4 style="color:var(--success); margin-bottom: 0.5rem;">Evolución Automática (Auto-Advance Loop):</h4>
         <ol style="margin-left: 20px; font-size: 13.5px; color:#cbd5e1; line-height: 1.8;">
           <li><code>plan</code> finaliza con <code>ok</code>: diseña <code>TaxCalculator.Split(grossPrice)</code>.</li>
-          <li><code>build</code> arranca en <code>/home/ubuntu/dev/pos-app-worktrees/job-4a8f9021c7e2</code>. Escribe <code>pkg/tax/tax.go</code> y <code>pkg/tax/tax_test.go</code>. Abre <strong>PR #102</strong>.</li>
+          <li><code>build</code> arranca en <code>$HOME/dev/pos-app-worktrees/job-4a8f9021c7e2</code>. Escribe <code>pkg/tax/tax.go</code> y <code>pkg/tax/tax_test.go</code>. Abre <strong>PR #102</strong>.</li>
           <li><code>review</code> ejecuta el evaluador independiente con <code>--temperature=0.1</code>. Emite <code>ok: tests cubren casos borde de redondeo bancario</code>.</li>
           <li><code>wait_ci</code> sondea GitHub Actions. A los 45s: <strong>Pass (14 checks verdes)</strong>.</li>
           <li>Worktree eliminado automáticamente. Status final: <strong>READY</strong>.</li>
@@ -976,14 +976,14 @@ Características:
 # 1. Registrar tu proyecto principal (se activa automáticamente)
 line project add pos-core \
   --name "POS Core Engine" \
-  --repo /home/ubuntu/dev/pos-app \
+  --repo $HOME/dev/pos-app \
   --exec claude \
   --ntfy-topic pos-alerts
 
 # 2. Registrar un segundo repositorio (frontend web)
 line project add web \
   --name "Web Dashboard" \
-  --repo /home/ubuntu/dev/web-dashboard
+  --repo $HOME/dev/web-dashboard
 
 # 3. Listar proyectos registrados (* marca el activo)
 line project list
@@ -1173,7 +1173,7 @@ line tui</code></pre>
 which line && line help</code></pre>
             <details>
               <summary>Ver resultado esperado</summary>
-              <pre><code>/home/ubuntu/.local/bin/line
+              <pre><code>~/.local/bin/line
 line is a deterministic issue-to-PR factory for the kbs suite.
 Phases: plan -> build -> review -> wait_ci -> ready.
 ...</code></pre>
@@ -1193,7 +1193,7 @@ Phases: plan -> build -> review -> wait_ci -> ready.
             </details>
             <details>
               <summary>Solución</summary>
-              <pre><code>line run --auto=false --repo /home/ubuntu/dev/kbs https://github.com/QuantumEdu/kbs/issues/1
+              <pre><code>line run --auto=false --repo $HOME/dev/q-skillvault https://github.com/QuantumEdu/q-skillvault/issues/1
 line status
 # Para avanzar manualmente un solo paso:
 line next</code></pre>

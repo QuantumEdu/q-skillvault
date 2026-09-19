@@ -14,8 +14,19 @@ vendor/
 /skillvault.exe
 /line
 
-# Vault data
+# Secrets and environment
+.env
+.env.*
+*.env
+
+# Vault data & databases
+*.db
+*.sqlite
+*.sqlite3
 skillvault.db
+
+# CodeGraph index
+.codegraph/
 
 # Zone.Identifier (NTFS alternate streams)
 *:Zone.Identifier

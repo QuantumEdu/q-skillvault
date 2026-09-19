@@ -3,7 +3,7 @@
 ## 1. Descargar el binario
 
 ```bash
-curl -L -o ~/tools/skillvault https://github.com/QuantumEdu/kbs/releases/download/v3.0.0/skillvault-linux-amd64
+curl -L -o ~/tools/skillvault https://github.com/QuantumEdu/q-skillvault/releases/download/v3.0.0/skillvault-linux-amd64
 chmod +x ~/tools/skillvault
 export PATH="$HOME/tools:$PATH"
 ```
@@ -12,10 +12,10 @@ Si estás en macOS:
 
 ```bash
 # Apple Silicon (M1/M2/M3)
-curl -L -o ~/tools/skillvault https://github.com/QuantumEdu/kbs/releases/download/v3.0.0/skillvault-darwin-arm64
+curl -L -o ~/tools/skillvault https://github.com/QuantumEdu/q-skillvault/releases/download/v3.0.0/skillvault-darwin-arm64
 
 # Intel
-curl -L -o ~/tools/skillvault https://github.com/QuantumEdu/kbs/releases/download/v3.0.0/skillvault-darwin-amd64
+curl -L -o ~/tools/skillvault https://github.com/QuantumEdu/q-skillvault/releases/download/v3.0.0/skillvault-darwin-amd64
 
 chmod +x ~/tools/skillvault
 export PATH="$HOME/tools:$PATH"
@@ -24,15 +24,15 @@ export PATH="$HOME/tools:$PATH"
 Si estás en Windows (Git Bash / WSL):
 
 ```bash
-curl -L -o ~/tools/skillvault.exe https://github.com/QuantumEdu/kbs/releases/download/v3.0.0/skillvault-windows-amd64.exe
+curl -L -o ~/tools/skillvault.exe https://github.com/QuantumEdu/q-skillvault/releases/download/v3.0.0/skillvault-windows-amd64.exe
 ```
 
 ### Build desde fuente
 
 ```bash
-git clone https://github.com/QuantumEdu/kbs
-cd kbs
-go build -ldflags="-s -w" -o ~/tools/skillvault ./cmd/skillvault
+git clone https://github.com/QuantumEdu/q-skillvault.git
+cd q-skillvault
+make install-all
 ```
 
 ## 2. Inicializar el vault

@@ -66,7 +66,7 @@ func TestInjectionDetector(t *testing.T) {
 			name: "Safe tool call",
 			payload: map[string]interface{}{
 				"tool": "read_file",
-				"path": "/home/ubuntu/dev/main.go",
+				"path": "/home/user/dev/main.go",
 			},
 			expectSignal: false,
 		},
