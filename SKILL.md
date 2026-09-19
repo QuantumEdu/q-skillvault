@@ -1,10 +1,10 @@
 ---
 name: q:skillvault
 description: "Trigger: /q-skillvault, /skillvault, skillvault, q-skillvault, vault de skills, knowledge vault, base de conocimiento, line factory, mcp skillvault, context bundle. Knowledge Operating System local-first para desarrolladores y agentes IA: almacenamiento híbrido (SQLite+FTS5), compilación contextual de 7 modos, MCP stdio server, router semántico y fábrica determinista issue-to-PR (line)."
+version: 3.1.0
 license: MIT
 metadata:
   author: Gabriel Magallon Sanchez - Qu@antum
-  version: "3.1.0"
   date: "2026-09-19"
   updated_at: "2026-09-19"
   repository: "https://github.com/QuantumEdu/q-skillvault"
@@ -18,7 +18,7 @@ metadata:
 
 - **Autor:** Gabriel Magallon Sanchez - Qu@antum
 - **Organización:** QuantumEdu
-- **Licencia:** MIT ([LICENSE](file:///home/ubuntu/dev/kbs/LICENSE))
+- **Licencia:** MIT ([LICENSE](https://github.com/QuantumEdu/q-skillvault/blob/main/LICENSE))
 - **Repositorio:** [https://github.com/QuantumEdu/q-skillvault](https://github.com/QuantumEdu/q-skillvault)
 
 ### Principios Fundamentales
