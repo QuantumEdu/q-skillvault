@@ -36,6 +36,7 @@ type Services struct {
 	saveResultSvc   *app.SavePromptResultService
 	compareSvc      *app.VectorService
 	statsSvc        *app.StatsService
+	linkSvc         *app.LinkService
 	fileSvc         *files.ArtifactFileService
 	scanner         *security.SecretScanner
 	syncSvc         *app.SyncService
@@ -86,6 +87,11 @@ func openVault() *Services {
 	sqlDB, err := db.OpenDB(dbPath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error opening database: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := db.RunMigrations(sqlDB); err != nil {
+		fmt.Fprintf(os.Stderr, "error migrating database: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -141,6 +147,7 @@ func openVault() *Services {
 		gzipTransport = buildTransport(cfg)
 	}
 	syncSvc := app.NewSyncService(exportSvc, importSvc, gzipTransport)
+	linkSvc := app.NewLinkService(entrySvc)
 
 	return &Services{
 		store:           store,
@@ -162,6 +169,7 @@ func openVault() *Services {
 		saveResultSvc:   saveResultSvc,
 		compareSvc:      compareSvc,
 		statsSvc:        statsSvc,
+		linkSvc:         linkSvc,
 		fileSvc:         fileSvc,
 		scanner:         scanner,
 		syncSvc:         syncSvc,

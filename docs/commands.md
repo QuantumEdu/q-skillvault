@@ -204,6 +204,43 @@ Alias: `skillvault read <entry-id-or-slug>`
 
 ---
 
+## `link`
+
+Manage URL bookmarks with keyword aliases and clipboard support for instant pasting into coding agents.
+
+### Add a link
+```bash
+skillvault link add "https://github.com/charmbracelet/bubbletea" \
+  --alias btea \
+  --title "Bubble Tea" \
+  --tags "go,tui" \
+  --summary "The fun, fast, and functional TUI framework for Go"
+```
+
+### Get link URL
+```bash
+# Print URL to stdout
+skillvault link get btea
+
+# Print URL and copy to clipboard (xclip, wl-copy, pbcopy, or clip)
+skillvault link get btea --copy
+```
+
+### Search links
+FTS5 full-text search across title, summary, tags, and URL:
+```bash
+skillvault link search "tui"
+skillvault link search "bubbletea" --limit 5
+```
+
+### List links
+```bash
+skillvault link list
+skillvault link ls --project myproj
+```
+
+---
+
 ## `save-artifact`
 
 Save a large artifact backed by the filesystem.
