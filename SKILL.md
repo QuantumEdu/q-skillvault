@@ -78,6 +78,13 @@ skillvault context --mode full_brief --project "pos-app"
 
 # Ruteo semántico de intención
 skillvault route "necesito auditar la seguridad de las APIs"
+
+# Marcadores de URLs y enlaces con alias rápido (Links & Bookmarks)
+skillvault link add "https://github.com/charmbracelet/bubbletea" --alias btea --tags "go,tui"
+skillvault link get btea            # Imprime URL directa
+skillvault link get btea --copy     # Imprime y copia al clipboard (xclip/wl-copy/pbcopy/clip)
+skillvault link search "tui"        # Búsqueda FTS5 en enlaces guardados
+skillvault link list                # Tabla de enlaces y repositorios
 ```
 
 ### 2. Fábrica Determinista Issue-to-PR (`line`)
@@ -130,6 +137,10 @@ Para exponer el conocimiento del vault a agentes (Claude Code, OpenCode, Cursor,
 - `save_result(run_id, summary, artifacts)`: Registra resultado de ejecución.
 - `route_scenario(scenario)`: Resuelve escenario a workflow o skill recomendado.
 - `run_workflow(workflow_id, params)`: Ejecuta workflow multi-fase estructurado.
+- `add_link(url, alias, title, summary, tags, project)`: Registra marcador de URL con alias corto.
+- `get_link(alias)`: Resuelve alias o palabra clave a su URL directa.
+- `search_links(query, project, limit)`: Búsqueda FTS5 entre enlaces guardados.
+- `list_links(project)`: Lista marcadores de URLs guardados.
 
 ---
 

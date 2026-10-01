@@ -32,6 +32,7 @@ type ToolRegistry struct {
 	projectSvc        *app.ProjectService
 	saveResultSvc     *app.SavePromptResultService
 	statsSvc          *app.StatsService
+	linkSvc           *app.LinkService
 }
 
 // NewToolRegistry creates a registry with a generic handler (for testing).
@@ -74,6 +75,12 @@ func (r *ToolRegistry) WithWorkflowRunService(svc *app.WorkflowRunService) *Tool
 // WithStatsService sets the stats service for get_stats tool.
 func (r *ToolRegistry) WithStatsService(svc *app.StatsService) *ToolRegistry {
 	r.statsSvc = svc
+	return r
+}
+
+// WithLinkService sets the link service for link MCP tools.
+func (r *ToolRegistry) WithLinkService(svc *app.LinkService) *ToolRegistry {
+	r.linkSvc = svc
 	return r
 }
 
@@ -236,6 +243,25 @@ func (r *ToolRegistry) registerV2Tools() {
 			"task_id": map[string]interface{}{"type": "string", "description": "Filter by task ID (optional)"},
 			"project": map[string]interface{}{"type": "string", "description": "Filter by project name or ID (optional)"},
 		})},
+		{Name: "add_link", Description: "Store a URL bookmark with an alias keyword for quick retrieval", InputSchema: schemaObj(map[string]interface{}{
+			"url":     map[string]interface{}{"type": "string", "description": "URL to bookmark (required)"},
+			"alias":   map[string]interface{}{"type": "string", "description": "Short keyword alias for fast retrieval"},
+			"title":   map[string]interface{}{"type": "string", "description": "Human-readable title (defaults to URL)"},
+			"summary": map[string]interface{}{"type": "string", "description": "Optional description or notes"},
+			"tags":    map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Additional tags"},
+			"project": map[string]interface{}{"type": "string", "description": "Project scope (optional)"},
+		})},
+		{Name: "get_link", Description: "Resolve an alias keyword to its stored URL", InputSchema: schemaObj(map[string]interface{}{
+			"alias": map[string]interface{}{"type": "string", "description": "Alias keyword to resolve (required)"},
+		})},
+		{Name: "search_links", Description: "Search stored URL bookmarks with FTS5 across title, summary, tags, and URL", InputSchema: schemaObj(map[string]interface{}{
+			"query":   map[string]interface{}{"type": "string", "description": "Search query (required)"},
+			"project": map[string]interface{}{"type": "string", "description": "Filter by project (optional)"},
+			"limit":   map[string]interface{}{"type": "number", "description": "Max results (default 20)"},
+		})},
+		{Name: "list_links", Description: "List all stored URL bookmarks, optionally filtered by project", InputSchema: schemaObj(map[string]interface{}{
+			"project": map[string]interface{}{"type": "string", "description": "Filter by project (optional)"},
+		})},
 	}
 }
 
@@ -309,6 +335,14 @@ func (r *ToolRegistry) dispatch(ctx context.Context, name string, args map[strin
 		return r.handleSaveHandoff(ctx, args)
 	case "get_handoff":
 		return r.handleGetHandoff(ctx, args)
+	case "add_link":
+		return r.handleAddLink(ctx, args)
+	case "get_link":
+		return r.handleGetLink(ctx, args)
+	case "search_links":
+		return r.handleSearchLinks(ctx, args)
+	case "list_links":
+		return r.handleListLinks(ctx, args)
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
@@ -1316,6 +1350,137 @@ func (r *ToolRegistry) handleGetHandoff(ctx context.Context, args map[string]int
 
 	latest := results[0]
 	return textResult(fmt.Sprintf("[%s] %s\n\n%s", latest.Entry.ID, latest.Entry.Title, latest.Entry.BodyOptional)), nil
+}
+
+func (r *ToolRegistry) handleAddLink(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.linkSvc == nil {
+		return errResult("link service not available"), nil
+	}
+	url := strArg(args, "url")
+	if url == "" {
+		return errResult("url is required"), nil
+	}
+	input := app.SaveLinkInput{
+		URL:     url,
+		Title:   strArg(args, "title"),
+		Summary: strArg(args, "summary"),
+		Alias:   strArg(args, "alias"),
+		Tags:    parseStrings(args["tags"]),
+		Project: strArg(args, "project"),
+	}
+	res, err := r.linkSvc.SaveLink(ctx, input)
+	if err != nil {
+		return errResult("failed to save link: " + err.Error()), nil
+	}
+	return jsonResult(map[string]interface{}{
+		"id":     res.Entry.Entry.ID,
+		"url":    res.Entry.Entry.ExternalRef,
+		"title":  res.Entry.Entry.Title,
+		"status": "saved",
+	}), nil
+}
+
+func (r *ToolRegistry) handleGetLink(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.linkSvc == nil {
+		return errResult("link service not available"), nil
+	}
+	alias := strArg(args, "alias")
+	if alias == "" {
+		return errResult("alias is required"), nil
+	}
+	res, err := r.linkSvc.GetLinkByAlias(ctx, alias)
+	if err != nil {
+		return errResult("failed to get link: " + err.Error()), nil
+	}
+	if res == nil {
+		return errResult(fmt.Sprintf("link with alias %q not found", alias)), nil
+	}
+	tags := make([]string, len(res.Tags))
+	for i, t := range res.Tags {
+		tags[i] = t.Name
+	}
+	return jsonResult(map[string]interface{}{
+		"id":      res.Entry.ID,
+		"url":     res.Entry.ExternalRef,
+		"title":   res.Entry.Title,
+		"summary": res.Entry.Summary,
+		"tags":    tags,
+	}), nil
+}
+
+func (r *ToolRegistry) handleSearchLinks(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.linkSvc == nil {
+		return errResult("link service not available"), nil
+	}
+	query := strArg(args, "query")
+	project := strArg(args, "project")
+	limit := intArg(args, "limit")
+	results, err := r.linkSvc.SearchLinks(ctx, query, project, limit)
+	if err != nil {
+		return errResult("search failed: " + err.Error()), nil
+	}
+	type linkItem struct {
+		ID      string   `json:"id"`
+		URL     string   `json:"url"`
+		Title   string   `json:"title"`
+		Summary string   `json:"summary"`
+		Tags    []string `json:"tags"`
+	}
+	items := make([]linkItem, 0, len(results))
+	for _, res := range results {
+		tagNames := make([]string, len(res.Tags))
+		for i, t := range res.Tags {
+			tagNames[i] = t.Name
+		}
+		items = append(items, linkItem{
+			ID:      res.Entry.ID,
+			URL:     res.Entry.ExternalRef,
+			Title:   res.Entry.Title,
+			Summary: res.Entry.Summary,
+			Tags:    tagNames,
+		})
+	}
+	return jsonResult(map[string]interface{}{
+		"query":   query,
+		"count":   len(items),
+		"results": items,
+	}), nil
+}
+
+func (r *ToolRegistry) handleListLinks(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.linkSvc == nil {
+		return errResult("link service not available"), nil
+	}
+	project := strArg(args, "project")
+	items, err := r.linkSvc.ListLinks(ctx, project)
+	if err != nil {
+		return errResult("list links failed: " + err.Error()), nil
+	}
+	type linkItem struct {
+		ID      string   `json:"id"`
+		URL     string   `json:"url"`
+		Title   string   `json:"title"`
+		Summary string   `json:"summary"`
+		Tags    []string `json:"tags"`
+	}
+	out := make([]linkItem, 0, len(items))
+	for _, it := range items {
+		tagNames := make([]string, len(it.Tags))
+		for i, t := range it.Tags {
+			tagNames[i] = t.Name
+		}
+		out = append(out, linkItem{
+			ID:      it.Entry.ID,
+			URL:     it.Entry.ExternalRef,
+			Title:   it.Entry.Title,
+			Summary: it.Entry.Summary,
+			Tags:    tagNames,
+		})
+	}
+	return jsonResult(map[string]interface{}{
+		"count": len(out),
+		"links": out,
+	}), nil
 }
 
 func errResult(text string) *ToolCallResult {

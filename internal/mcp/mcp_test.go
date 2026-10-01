@@ -39,7 +39,8 @@ func setupMCPServices(t *testing.T) (*ToolRegistry, *app.ProjectService, func())
 	entrySvc.SetWorkflowStore(store.Workflows)
 	entryVersionSvc := app.NewEntryVersionService(store.EntryVersions, store.Entries)
 
-	reg := NewServiceToolRegistry(entrySvc, artifactSvc, contextSvc, seriesSvc, workflowSvc, sessionSvc, projectSvc).WithEntryRefService(entryRefSvc).WithWorkflowRunService(workflowRunSvc).WithEntryVersionService(entryVersionSvc)
+	linkSvc := app.NewLinkService(entrySvc)
+	reg := NewServiceToolRegistry(entrySvc, artifactSvc, contextSvc, seriesSvc, workflowSvc, sessionSvc, projectSvc).WithEntryRefService(entryRefSvc).WithWorkflowRunService(workflowRunSvc).WithEntryVersionService(entryVersionSvc).WithLinkService(linkSvc)
 	cleanup := func() { sqlDB.Close() }
 	return reg, projectSvc, cleanup
 }
@@ -97,8 +98,8 @@ func TestToolsListReturns24Tools(t *testing.T) {
 	default:
 		t.Fatalf("tools is not an array: %T", toolsRaw)
 	}
-	if toolCount != 26 {
-		t.Errorf("expected 26 tools, got %d", toolCount)
+	if toolCount != 30 {
+		t.Errorf("expected 30 tools, got %d", toolCount)
 	}
 }
 
@@ -312,6 +313,10 @@ func TestToolNamesAreCorrect(t *testing.T) {
 		"restore_entry_version",
 		"save_handoff",
 		"get_handoff",
+		"add_link",
+		"get_link",
+		"search_links",
+		"list_links",
 	}
 
 	if len(names) != len(expected) {
@@ -1263,15 +1268,15 @@ func TestToolCountIncludesNewTools(t *testing.T) {
 	reg := NewToolRegistry(nil)
 	tools := reg.List()
 
-	// Should be 26 tools: 24 existing + save_handoff + get_handoff
-	if len(tools) != 26 {
-		t.Errorf("expected 26 tools, got %d", len(tools))
+	// Should be 30 tools: 26 existing + 4 link tools
+	if len(tools) != 30 {
+		t.Errorf("expected 30 tools, got %d", len(tools))
 	}
 	names := make(map[string]bool)
 	for _, tool := range tools {
 		names[tool.Name] = true
 	}
-	for _, name := range []string{"run_workflow", "route_scenario", "get_stats", "list_workflow_runs", "get_run", "list_entry_versions", "restore_entry_version", "save_handoff", "get_handoff"} {
+	for _, name := range []string{"run_workflow", "route_scenario", "get_stats", "list_workflow_runs", "get_run", "list_entry_versions", "restore_entry_version", "save_handoff", "get_handoff", "add_link", "get_link", "search_links", "list_links"} {
 		if !names[name] {
 			t.Errorf("expected tool %q to be registered", name)
 		}

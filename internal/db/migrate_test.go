@@ -285,8 +285,8 @@ func TestMigrationIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to count migrations: %v", err)
 	}
-	if count != 10 {
-		t.Errorf("expected 10 migration records (v1..v10), got %d", count)
+	if count != 11 {
+		t.Errorf("expected 11 migration records (v1..v11), got %d", count)
 	}
 }
 
@@ -738,3 +738,29 @@ func TestMigration010PendingEntryType(t *testing.T) {
 		t.Fatalf("RunMigrations should remain idempotent after 010: %v", err)
 	}
 }
+
+func TestMigration011LinkEntryType(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open in-memory DB: %v", err)
+	}
+	defer db.Close()
+
+	if err := RunMigrations(db); err != nil {
+		t.Fatalf("RunMigrations failed: %v", err)
+	}
+
+	var version int
+	if err := db.QueryRow("SELECT version FROM schema_migrations WHERE version = 11").Scan(&version); err != nil {
+		t.Fatalf("migration version 11 not recorded: %v", err)
+	}
+
+	if _, err := db.Exec("INSERT INTO entries (id, name, title, slug, type, summary, body_optional, purpose, status, external_ref) VALUES ('e-link', 'Link Entry', 'Link Entry', 'link-entry', 'link', 'link summary', '', 'KNOWLEDGE', 'active', 'https://github.com')"); err != nil {
+		t.Fatalf("CHECK constraint rejected link type: %v", err)
+	}
+
+	if _, err := db.Exec("INSERT INTO entries (id, name, title, slug, type, summary, body_optional, purpose, status) VALUES ('e-bad-link-type', 'Bad', 'Bad', 'bad', 'bogus_link', '', '', 'KNOWLEDGE', 'active')"); err == nil {
+		t.Fatal("CHECK constraint accepted invalid type 'bogus_link'")
+	}
+}
+

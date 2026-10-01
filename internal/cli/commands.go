@@ -71,6 +71,32 @@ func ParseCommand(args []string) (string, error) {
 			return "", fmt.Errorf("entry restore requires an entry ID")
 		}
 		return sub, nil
+	case "link":
+		if len(args) < 3 {
+			return "", fmt.Errorf("link requires a subcommand (add, get, search, list)")
+		}
+		sub2 := args[2]
+		switch sub2 {
+		case "add":
+			if len(args) < 4 {
+				return "", fmt.Errorf("link add requires a URL")
+			}
+			return "link-add", nil
+		case "get":
+			if len(args) < 4 {
+				return "", fmt.Errorf("link get requires an alias")
+			}
+			return "link-get", nil
+		case "search":
+			if len(args) < 4 {
+				return "", fmt.Errorf("link search requires a query")
+			}
+			return "link-search", nil
+		case "list", "ls":
+			return "link-list", nil
+		default:
+			return "", fmt.Errorf("unknown link subcommand: %s (use add, get, search, list)", sub2)
+		}
 	case "add-entry", "search", "save-artifact", "get-context", "add-project", "session-wrap":
 		return sub, nil
 	case "get", "archive":

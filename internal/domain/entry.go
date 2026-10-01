@@ -38,6 +38,7 @@ const (
 	EntryTypeHandoff         EntryType = "handoff"
 	EntryTypePending         EntryType = "pending"
 	EntryTypeRouting         EntryType = "routing"
+	EntryTypeLink            EntryType = "link"
 )
 
 func (et EntryType) IsValid() bool {
@@ -45,7 +46,8 @@ func (et EntryType) IsValid() bool {
 	case EntryTypePrompt, EntryTypeSkill, EntryTypeWorkflowNote,
 		EntryTypeReference, EntryTypeUser, EntryTypeFeedback,
 		EntryTypeProjectState, EntryTypeSession, EntryTypeDecision,
-		EntryTypeArtifactSummary, EntryTypeHandoff, EntryTypePending, EntryTypeRouting:
+		EntryTypeArtifactSummary, EntryTypeHandoff, EntryTypePending, EntryTypeRouting,
+		EntryTypeLink:
 		return true
 	}
 	return false

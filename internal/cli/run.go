@@ -29,6 +29,14 @@ func Run(cmd string, args []string) {
 		runPendingShow(ctx, svc, args)
 	case "pending-done":
 		runPendingDone(ctx, svc, args)
+	case "link-add":
+		runLinkAdd(ctx, svc, args)
+	case "link-get":
+		runLinkGet(ctx, svc, args)
+	case "link-search":
+		runLinkSearch(ctx, svc, args)
+	case "link-list":
+		runLinkList(ctx, svc, args)
 	case "add-workflow":
 		runAddWorkflow(ctx, svc, args)
 	case "render-workflow":
