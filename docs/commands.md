@@ -241,6 +241,55 @@ skillvault link ls --project myproj
 
 ---
 
+## `cmd`
+
+Store and retrieve command snippets and instruction recipes with dynamic variable interpolation (`{{var}}`) and system clipboard support (native in WSL via `clip.exe`, `wl-copy`, `xclip`, or `pbcopy`).
+
+Aliases: `skillvault instruction`, `skillvault snippet`, `skillvault recipe`
+
+### Add an instruction / command recipe
+```bash
+# Command with placeholders {{input}}, {{output}}, {{crf}}
+skillvault cmd add "ffmpeg -i {{input}} -vcodec libx264 -crf {{crf}} {{output}}" \
+  --alias ff-compress \
+  --title "Compress Video H264" \
+  --tags "video,ffmpeg" \
+  --summary "Balanced quality compression with ffmpeg"
+
+# Git rebase recipe
+skillvault cmd add "git rebase -i HEAD~{{count}}" \
+  --alias git-rebase \
+  --title "Interactive Git Rebase" \
+  --tags "git,rebase"
+```
+
+### Get and resolve variables
+```bash
+# Substitute variables and print to stdout
+skillvault cmd get ff-compress --var input=raw.mov --var crf=28 --var output=out.mp4
+
+# Substitute variables and copy directly to clipboard
+skillvault cmd get git-rebase --var count=3 --copy
+
+# Missing variables will interactively prompt in terminal, or pass --raw to see placeholders
+skillvault cmd get git-rebase --raw
+```
+
+### Search instructions
+FTS5 full-text search across title, summary, tags, and command body:
+```bash
+skillvault cmd search "ffmpeg"
+skillvault cmd search "rebase" --limit 5
+```
+
+### List instructions
+```bash
+skillvault cmd list
+skillvault cmd ls --project myproj
+```
+
+---
+
 ## `save-artifact`
 
 Save a large artifact backed by the filesystem.

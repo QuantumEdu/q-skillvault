@@ -37,6 +37,7 @@ type Services struct {
 	compareSvc      *app.VectorService
 	statsSvc        *app.StatsService
 	linkSvc         *app.LinkService
+	instructionSvc  *app.InstructionService
 	fileSvc         *files.ArtifactFileService
 	scanner         *security.SecretScanner
 	syncSvc         *app.SyncService
@@ -148,6 +149,7 @@ func openVault() *Services {
 	}
 	syncSvc := app.NewSyncService(exportSvc, importSvc, gzipTransport)
 	linkSvc := app.NewLinkService(entrySvc)
+	instructionSvc := app.NewInstructionService(entrySvc)
 
 	return &Services{
 		store:           store,
@@ -170,6 +172,7 @@ func openVault() *Services {
 		compareSvc:      compareSvc,
 		statsSvc:        statsSvc,
 		linkSvc:         linkSvc,
+		instructionSvc:  instructionSvc,
 		fileSvc:         fileSvc,
 		scanner:         scanner,
 		syncSvc:         syncSvc,

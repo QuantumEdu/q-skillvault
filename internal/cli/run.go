@@ -37,6 +37,14 @@ func Run(cmd string, args []string) {
 		runLinkSearch(ctx, svc, args)
 	case "link-list":
 		runLinkList(ctx, svc, args)
+	case "cmd-add":
+		runCmdAdd(ctx, svc, args)
+	case "cmd-get":
+		runCmdGet(ctx, svc, args)
+	case "cmd-search":
+		runCmdSearch(ctx, svc, args)
+	case "cmd-list":
+		runCmdList(ctx, svc, args)
 	case "add-workflow":
 		runAddWorkflow(ctx, svc, args)
 	case "render-workflow":

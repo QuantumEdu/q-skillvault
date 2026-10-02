@@ -85,6 +85,14 @@ skillvault link get btea            # Imprime URL directa
 skillvault link get btea --copy     # Imprime y copia al clipboard (xclip/wl-copy/pbcopy/clip)
 skillvault link search "tui"        # Búsqueda FTS5 en enlaces guardados
 skillvault link list                # Tabla de enlaces y repositorios
+
+# Recetas de comandos e instrucciones con variables dinámicas (Cmd & Instructions)
+skillvault cmd add "ffmpeg -i {{input}} -vcodec libx264 -crf {{crf}} {{output}}" --alias ff-compress --tags "video,ffmpeg"
+skillvault cmd add "git rebase -i HEAD~{{count}}" --alias git-rebase --tags "git,rebase"
+skillvault cmd get ff-compress --var input=raw.mov --var crf=28 --var output=out.mp4
+skillvault cmd get git-rebase --var count=3 --copy # Resuelve e inyecta al clipboard nativo (WSL/Linux/macOS)
+skillvault cmd search "ffmpeg"      # Búsqueda FTS5 en recetas y comandos
+skillvault cmd list                 # Listado de comandos y sus placeholders
 ```
 
 ### 2. Fábrica Determinista Issue-to-PR (`line`)
@@ -141,6 +149,10 @@ Para exponer el conocimiento del vault a agentes (Claude Code, OpenCode, Cursor,
 - `get_link(alias)`: Resuelve alias o palabra clave a su URL directa.
 - `search_links(query, project, limit)`: Búsqueda FTS5 entre enlaces guardados.
 - `list_links(project)`: Lista marcadores de URLs guardados.
+- `add_instruction(command, alias, title, summary, tags, project)`: Registra receta/comando con placeholders.
+- `get_instruction(alias, vars)`: Resuelve instrucción por alias interpolando variables provistas.
+- `search_instructions(query, project, limit)`: Búsqueda FTS5 entre recetas de comandos guardadas.
+- `list_instructions(project)`: Lista todas las instrucciones y recetas registradas.
 
 ---
 
