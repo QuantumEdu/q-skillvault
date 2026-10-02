@@ -97,6 +97,32 @@ func ParseCommand(args []string) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown link subcommand: %s (use add, get, search, list)", sub2)
 		}
+	case "cmd", "instruction", "snippet":
+		if len(args) < 3 {
+			return "", fmt.Errorf("%s requires a subcommand (add, get, search, list)", sub)
+		}
+		sub2 := args[2]
+		switch sub2 {
+		case "add":
+			if len(args) < 4 {
+				return "", fmt.Errorf("%s add requires a command string", sub)
+			}
+			return "cmd-add", nil
+		case "get":
+			if len(args) < 4 {
+				return "", fmt.Errorf("%s get requires an alias", sub)
+			}
+			return "cmd-get", nil
+		case "search":
+			if len(args) < 4 {
+				return "", fmt.Errorf("%s search requires a query", sub)
+			}
+			return "cmd-search", nil
+		case "list", "ls":
+			return "cmd-list", nil
+		default:
+			return "", fmt.Errorf("unknown %s subcommand: %s (use add, get, search, list)", sub, sub2)
+		}
 	case "add-entry", "search", "save-artifact", "get-context", "add-project", "session-wrap":
 		return sub, nil
 	case "get", "archive":

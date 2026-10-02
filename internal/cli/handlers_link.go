@@ -306,11 +306,13 @@ func clipboardCandidates() [][]string {
 		return [][]string{{"pbcopy"}}
 	case "windows":
 		return [][]string{{"clip"}}
-	default: // Linux
+	default: // Linux (including WSL)
 		return [][]string{
-			{"xclip", "-selection", "clipboard"},
 			{"wl-copy"},
+			{"xclip", "-selection", "clipboard"},
 			{"xsel", "--clipboard", "--input"},
+			{"clip.exe"},
+			{"/mnt/c/Windows/System32/clip.exe"},
 		}
 	}
 }

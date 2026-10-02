@@ -22,7 +22,7 @@ func RunMCP() {
 		svc.workflowSvc,
 		svc.sessionSvc,
 		svc.projectSvc,
-	).WithEntryRefService(svc.entryRefSvc).WithCompareService(svc.compareSvc).WithSaveResultService(svc.saveResultSvc).WithWorkflowRunService(svc.workflowRunSvc).WithStatsService(svc.statsSvc).WithEntryVersionService(svc.entryVersionSvc).WithLinkService(svc.linkSvc)
+	).WithEntryRefService(svc.entryRefSvc).WithCompareService(svc.compareSvc).WithSaveResultService(svc.saveResultSvc).WithWorkflowRunService(svc.workflowRunSvc).WithStatsService(svc.statsSvc).WithEntryVersionService(svc.entryVersionSvc).WithLinkService(svc.linkSvc).WithInstructionService(svc.instructionSvc)
 	server := mcp.NewServer(reg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -285,8 +285,8 @@ func TestMigrationIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to count migrations: %v", err)
 	}
-	if count != 11 {
-		t.Errorf("expected 11 migration records (v1..v11), got %d", count)
+	if count != 12 {
+		t.Errorf("expected 12 migration records (v1..v12), got %d", count)
 	}
 }
 
@@ -761,6 +761,31 @@ func TestMigration011LinkEntryType(t *testing.T) {
 
 	if _, err := db.Exec("INSERT INTO entries (id, name, title, slug, type, summary, body_optional, purpose, status) VALUES ('e-bad-link-type', 'Bad', 'Bad', 'bad', 'bogus_link', '', '', 'KNOWLEDGE', 'active')"); err == nil {
 		t.Fatal("CHECK constraint accepted invalid type 'bogus_link'")
+	}
+}
+
+func TestMigration012InstructionEntryType(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open in-memory DB: %v", err)
+	}
+	defer db.Close()
+
+	if err := RunMigrations(db); err != nil {
+		t.Fatalf("RunMigrations failed: %v", err)
+	}
+
+	var version int
+	if err := db.QueryRow("SELECT version FROM schema_migrations WHERE version = 12").Scan(&version); err != nil {
+		t.Fatalf("migration version 12 not recorded: %v", err)
+	}
+
+	if _, err := db.Exec("INSERT INTO entries (id, name, title, slug, type, summary, body_optional, purpose, status, external_ref) VALUES ('e-inst', 'Instruction Entry', 'Instruction Entry', 'instruction-entry', 'instruction', 'instruction summary', 'git rebase -i HEAD~{{count}}', 'WORK', 'active', 'git-rebase')"); err != nil {
+		t.Fatalf("CHECK constraint rejected instruction type: %v", err)
+	}
+
+	if _, err := db.Exec("INSERT INTO entries (id, name, title, slug, type, summary, body_optional, purpose, status) VALUES ('e-bad-inst-type', 'Bad', 'Bad', 'bad', 'bogus_instruction', '', '', 'WORK', 'active')"); err == nil {
+		t.Fatal("CHECK constraint accepted invalid type 'bogus_instruction'")
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/quantum-6/skillvault/internal/app"
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/vars"
 )
 
 // ToolHandler is called when a tool is invoked (legacy/testing).
@@ -33,6 +34,7 @@ type ToolRegistry struct {
 	saveResultSvc     *app.SavePromptResultService
 	statsSvc          *app.StatsService
 	linkSvc           *app.LinkService
+	instructionSvc    *app.InstructionService
 }
 
 // NewToolRegistry creates a registry with a generic handler (for testing).
@@ -81,6 +83,12 @@ func (r *ToolRegistry) WithStatsService(svc *app.StatsService) *ToolRegistry {
 // WithLinkService sets the link service for link MCP tools.
 func (r *ToolRegistry) WithLinkService(svc *app.LinkService) *ToolRegistry {
 	r.linkSvc = svc
+	return r
+}
+
+// WithInstructionService sets the instruction service for instruction/cmd MCP tools.
+func (r *ToolRegistry) WithInstructionService(svc *app.InstructionService) *ToolRegistry {
+	r.instructionSvc = svc
 	return r
 }
 
@@ -262,6 +270,26 @@ func (r *ToolRegistry) registerV2Tools() {
 		{Name: "list_links", Description: "List all stored URL bookmarks, optionally filtered by project", InputSchema: schemaObj(map[string]interface{}{
 			"project": map[string]interface{}{"type": "string", "description": "Filter by project (optional)"},
 		})},
+		{Name: "add_instruction", Description: "Store a command snippet or instruction recipe with placeholders (e.g. {{input}})", InputSchema: schemaObj(map[string]interface{}{
+			"command": map[string]interface{}{"type": "string", "description": "Command or instruction template (required)"},
+			"alias":   map[string]interface{}{"type": "string", "description": "Short keyword alias for fast retrieval (required)"},
+			"title":   map[string]interface{}{"type": "string", "description": "Descriptive title (optional)"},
+			"summary": map[string]interface{}{"type": "string", "description": "Explanation or guidance on when to use (optional)"},
+			"tags":    map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Additional tags"},
+			"project": map[string]interface{}{"type": "string", "description": "Project scope (optional)"},
+		})},
+		{Name: "get_instruction", Description: "Resolve an instruction recipe by alias with optional variable interpolation", InputSchema: schemaObj(map[string]interface{}{
+			"alias": map[string]interface{}{"type": "string", "description": "Alias keyword to resolve (required)"},
+			"vars":  map[string]interface{}{"type": "object", "description": "Key-value map to substitute placeholders like {{key}}"},
+		})},
+		{Name: "search_instructions", Description: "Search instruction recipes and command snippets with FTS5", InputSchema: schemaObj(map[string]interface{}{
+			"query":   map[string]interface{}{"type": "string", "description": "Search query (required)"},
+			"project": map[string]interface{}{"type": "string", "description": "Filter by project (optional)"},
+			"limit":   map[string]interface{}{"type": "number", "description": "Max results (default 20)"},
+		})},
+		{Name: "list_instructions", Description: "List all stored instruction recipes, optionally filtered by project", InputSchema: schemaObj(map[string]interface{}{
+			"project": map[string]interface{}{"type": "string", "description": "Filter by project (optional)"},
+		})},
 	}
 }
 
@@ -343,6 +371,14 @@ func (r *ToolRegistry) dispatch(ctx context.Context, name string, args map[strin
 		return r.handleSearchLinks(ctx, args)
 	case "list_links":
 		return r.handleListLinks(ctx, args)
+	case "add_instruction":
+		return r.handleAddInstruction(ctx, args)
+	case "get_instruction":
+		return r.handleGetInstruction(ctx, args)
+	case "search_instructions":
+		return r.handleSearchInstructions(ctx, args)
+	case "list_instructions":
+		return r.handleListInstructions(ctx, args)
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
@@ -1480,6 +1516,170 @@ func (r *ToolRegistry) handleListLinks(ctx context.Context, args map[string]inte
 	return jsonResult(map[string]interface{}{
 		"count": len(out),
 		"links": out,
+	}), nil
+}
+
+func (r *ToolRegistry) handleAddInstruction(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.instructionSvc == nil {
+		return errResult("instruction service not available"), nil
+	}
+	cmd := strArg(args, "command")
+	if cmd == "" {
+		return errResult("command is required"), nil
+	}
+	alias := strArg(args, "alias")
+	if alias == "" {
+		return errResult("alias is required"), nil
+	}
+	input := app.SaveInstructionInput{
+		Command: cmd,
+		Alias:   alias,
+		Title:   strArg(args, "title"),
+		Summary: strArg(args, "summary"),
+		Tags:    parseStrings(args["tags"]),
+		Project: strArg(args, "project"),
+	}
+	res, err := r.instructionSvc.SaveInstruction(ctx, input)
+	if err != nil {
+		return errResult("failed to save instruction: " + err.Error()), nil
+	}
+	detectedVars := vars.Detect(cmd)
+	return jsonResult(map[string]interface{}{
+		"id":        res.Entry.Entry.ID,
+		"alias":     alias,
+		"command":   cmd,
+		"title":     res.Entry.Entry.Title,
+		"variables": detectedVars,
+		"status":    "saved",
+	}), nil
+}
+
+func (r *ToolRegistry) handleGetInstruction(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.instructionSvc == nil {
+		return errResult("instruction service not available"), nil
+	}
+	alias := strArg(args, "alias")
+	if alias == "" {
+		return errResult("alias is required"), nil
+	}
+	varMap := make(map[string]string)
+	if rawVars, ok := args["vars"].(map[string]interface{}); ok {
+		for k, v := range rawVars {
+			varMap[k] = fmt.Sprint(v)
+		}
+	}
+	res, err := r.instructionSvc.ResolveInstruction(ctx, alias, varMap)
+	if err != nil {
+		return errResult("failed to resolve instruction: " + err.Error()), nil
+	}
+	if res == nil {
+		return errResult(fmt.Sprintf("instruction with alias %q not found", alias)), nil
+	}
+	tagNames := make([]string, len(res.Tags))
+	for i, t := range res.Tags {
+		tagNames[i] = t.Name
+	}
+	return jsonResult(map[string]interface{}{
+		"id":           res.Entry.ID,
+		"alias":        res.Alias,
+		"title":        res.Entry.Title,
+		"command":      res.Command,
+		"raw_command":  res.RawCommand,
+		"missing_vars": res.MissingVars,
+		"variables":    res.Variables,
+		"summary":      res.Entry.Summary,
+		"tags":         tagNames,
+	}), nil
+}
+
+func (r *ToolRegistry) handleSearchInstructions(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.instructionSvc == nil {
+		return errResult("instruction service not available"), nil
+	}
+	query := strArg(args, "query")
+	project := strArg(args, "project")
+	limit := intArg(args, "limit")
+	results, err := r.instructionSvc.SearchInstructions(ctx, query, project, limit)
+	if err != nil {
+		return errResult("search failed: " + err.Error()), nil
+	}
+	type instItem struct {
+		ID        string   `json:"id"`
+		Alias     string   `json:"alias"`
+		Title     string   `json:"title"`
+		Command   string   `json:"command"`
+		Summary   string   `json:"summary"`
+		Variables []string `json:"variables"`
+		Tags      []string `json:"tags"`
+	}
+	items := make([]instItem, 0, len(results))
+	for _, res := range results {
+		tagNames := make([]string, len(res.Tags))
+		alias := ""
+		for i, t := range res.Tags {
+			tagNames[i] = t.Name
+			if strings.HasPrefix(t.Name, "alias:") {
+				alias = strings.TrimPrefix(t.Name, "alias:")
+			}
+		}
+		items = append(items, instItem{
+			ID:        res.Entry.ID,
+			Alias:     alias,
+			Title:     res.Entry.Title,
+			Command:   res.Entry.BodyOptional,
+			Summary:   res.Entry.Summary,
+			Variables: vars.Detect(res.Entry.BodyOptional),
+			Tags:      tagNames,
+		})
+	}
+	return jsonResult(map[string]interface{}{
+		"query":   query,
+		"count":   len(items),
+		"results": items,
+	}), nil
+}
+
+func (r *ToolRegistry) handleListInstructions(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.instructionSvc == nil {
+		return errResult("instruction service not available"), nil
+	}
+	project := strArg(args, "project")
+	items, err := r.instructionSvc.ListInstructions(ctx, project)
+	if err != nil {
+		return errResult("list instructions failed: " + err.Error()), nil
+	}
+	type instItem struct {
+		ID        string   `json:"id"`
+		Alias     string   `json:"alias"`
+		Title     string   `json:"title"`
+		Command   string   `json:"command"`
+		Summary   string   `json:"summary"`
+		Variables []string `json:"variables"`
+		Tags      []string `json:"tags"`
+	}
+	out := make([]instItem, 0, len(items))
+	for _, it := range items {
+		tagNames := make([]string, len(it.Tags))
+		alias := ""
+		for i, t := range it.Tags {
+			tagNames[i] = t.Name
+			if strings.HasPrefix(t.Name, "alias:") {
+				alias = strings.TrimPrefix(t.Name, "alias:")
+			}
+		}
+		out = append(out, instItem{
+			ID:        it.Entry.ID,
+			Alias:     alias,
+			Title:     it.Entry.Title,
+			Command:   it.Entry.BodyOptional,
+			Summary:   it.Entry.Summary,
+			Variables: vars.Detect(it.Entry.BodyOptional),
+			Tags:      tagNames,
+		})
+	}
+	return jsonResult(map[string]interface{}{
+		"count":        len(out),
+		"instructions": out,
 	}), nil
 }
 
