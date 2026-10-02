@@ -272,6 +272,8 @@ cmd/skillvault/
 | `add-project` | Create a project | `skillvault add-project --name "MyApp" --description "..."` |
 | `list-projects` / `projects` | List all projects | `skillvault projects` |
 | `pending` / `todo` | Capture, list, and resolve per-project pending items | `skillvault pending add --project myapp "Update presentation"` |
+| `link` / `bookmark` | Save, search, and copy URL bookmarks | `skillvault link add https://github.com/... --alias btea --copy` |
+| `cmd` / `instruction` | Save and interpolate command recipes with placeholders | `skillvault cmd get ff-compress --var input=raw.mov --copy` |
 | `archive` | Archive an entry | `skillvault archive clean-architecture-review` |
 | `add-workflow` | Create a workflow (JSON file) | `skillvault add-workflow workflow.json` |
 | `import-workflow` | Import workflow-builder YAML | `skillvault import-workflow --file workflow.yaml --project myapp` |
@@ -411,7 +413,7 @@ For full documentation, see [`docs/telemetry.md`](docs/telemetry.md).
 
 ---
 
-## MCP Tools (24)
+## MCP Tools (34)
 
 For AI agents (Claude Code, OpenCode, etc.):
 
@@ -441,6 +443,16 @@ For AI agents (Claude Code, OpenCode, etc.):
 | `get_run` | Get a single workflow run with step details |
 | `list_entry_versions` | List version history for an entry (descending by version number) |
 | `restore_entry_version` | Restore an entry to a previous version by version number |
+| `save_handoff` | Save a structured agent-to-agent task handoff / checkpoint |
+| `get_handoff` | Retrieve the latest agent-to-agent task handoff for a project or task_id |
+| `add_link` | Store a URL bookmark with an alias keyword for quick retrieval |
+| `get_link` | Resolve an alias keyword to its stored URL |
+| `search_links` | Search stored URL bookmarks with FTS5 across title, summary, tags, and URL |
+| `list_links` | List all stored URL bookmarks, optionally filtered by project |
+| `add_instruction` | Store a command snippet or instruction recipe with placeholders (e.g. `{{input}}`) |
+| `get_instruction` | Resolve an instruction recipe by alias with optional variable interpolation |
+| `search_instructions` | Search instruction recipes and command snippets with FTS5 |
+| `list_instructions` | List all stored instruction recipes, optionally filtered by project |
 
 ### MCP Setup (Claude Code / OpenCode)
 
@@ -468,7 +480,7 @@ ln -sf ~/tools/skillvault ~/tools/mcp
 
 ## Entity Model
 
-### Entry Types (12)
+### Entry Types (15)
 
 | Type | Purpose |
 |------|---------|
@@ -483,7 +495,10 @@ ln -sf ~/tools/skillvault ~/tools/mcp
 | `decision` | Architectual decision |
 | `artifact_summary` | Summary of a stored artifact |
 | `handoff` | Session handoff document |
+| `pending` | Actionable task or todo item |
 | `routing` | Scenario → workflow/skill routing rules |
+| `link` | URL bookmark with alias and tags |
+| `instruction` | Command snippet / recipe with variable placeholders |
 
 ### Purpose Taxonomy
 
@@ -666,6 +681,8 @@ Test pyramid:
 | Agent telemetry CLI (`telemetryctl`) | ✅ Active |
 | Agent telemetry plugins + wrapper | ✅ Active |
 | Quality signal detectors (loop, stall, streak, token) | ✅ Active |
+| Link bookmarks & quick paste (`skillvault link`) | ✅ Active |
+| Instruction recipes & vars interpolation (`skillvault cmd`) | ✅ Active |
 
 ---
 

@@ -12,6 +12,35 @@ All notable changes to SkillVault Qu@ntum are documented here.
   - Optional ntfy on `needs_human` / `blocked` / `ready` (`--ntfy-topic` or `LINE_NTFY_TOPIC`).
   - Loopback UI: `line serve` on `127.0.0.1:7340` (`docs/line.md`).
 
+## v3.2.0 — Links, Bookmarks & Command Instruction Recipes
+
+**2026-10-02**
+
+### Added
+
+- **URL Bookmarking System (`skillvault link`)**:
+  - Subcommands: `link add <url> --alias <alias> [--tags tag1,tag2]`, `link get <alias> [--copy]`, `link search <query>`, `link list`.
+  - Stored as first-class `type=link` entries in SQLite with URL in `external_ref` and `alias:<name>` FTS5 tag indexation.
+  - Multi-platform clipboard copy support (`xclip`, `wl-copy`, `pbcopy`, `clip`).
+  - 4 MCP tools: `add_link`, `get_link`, `search_links`, `list_links`.
+  - Database migration `011_link_entry_type.sql`.
+- **Command Snippets & Instruction Recipes (`skillvault cmd`)**:
+  - Subcommands: `cmd add "<command>" --alias <alias> [--tags tag1,tag2]`, `cmd get <alias> [--var key=val ...] [--copy]`, `cmd search <query>`, `cmd list`.
+  - Stored as first-class `type=instruction` entries in SQLite with command template in `body_optional`.
+  - Native integration with `internal/vars`: dynamic placeholder detection (`{{input}}`, `{{output}}`) and variable resolution.
+  - Interactive terminal variable prompt when missing parameters are detected.
+  - Native WSL clipboard support fallback via `/mnt/c/Windows/System32/clip.exe` and `clip.exe`.
+  - 4 MCP tools: `add_instruction`, `get_instruction`, `search_instructions`, `list_instructions` (total MCP tools: 34).
+  - Database migration `012_instruction_entry_type.sql`.
+- **Automatic Migration Execution**:
+  - `openVault()` now automatically runs pending migrations on startup, seamlessly upgrading existing vaults without manual intervention.
+
+### Changed
+
+- Version bump: `v3.1.0` → `v3.2.0` per semantic versioning policy for feature releases.
+- Total MCP tools expanded from 26 to 34.
+- Total entry types expanded to 15 (`prompt`, `skill`, `workflow_note`, `reference`, `user`, `feedback`, `project_state`, `session`, `decision`, `artifact_summary`, `handoff`, `pending`, `routing`, `link`, `instruction`).
+
 ## v3.1.0 — Evidence-Grade Development Telemetry
 
 **2026-08-28**
