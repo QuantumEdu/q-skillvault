@@ -288,6 +288,7 @@ cmd/skillvault/
 | `entry restore` | Restore an entry to a previous version | `skillvault entry restore clean-architecture-review --version 2` |
 | `memory index/reindex/list-external` | Index pi-memory.md files | `skillvault memory index --path ~/memory --project myapp` |
 | `backup` | Write a dated backup under `~/.skillvault/exports/` | `skillvault backup` |
+| `skillvault-sync` | Two-way bidirectional sync & merge with GitHub backup repo | `skillvault-sync status`, `skillvault-sync sync` |
 | `export` | Export vault to JSON or skill pack (`.svpack`) | `skillvault export vault.json [--pack --author ...]` |
 | `import` | Import vault from JSON or skill pack | `skillvault import vault.json [--pack --prefix ns/]` |
 | `version` | Show vault version | `skillvault version` |
@@ -683,6 +684,7 @@ Test pyramid:
 | Quality signal detectors (loop, stall, streak, token) | ✅ Active |
 | Link bookmarks & quick paste (`skillvault link`) | ✅ Active |
 | Instruction recipes & vars interpolation (`skillvault cmd`) | ✅ Active |
+| Bidirectional sync & merge (`skillvault-sync`) | ✅ Active |
 
 ---
 

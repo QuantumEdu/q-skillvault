@@ -12,6 +12,30 @@ All notable changes to SkillVault Qu@ntum are documented here.
   - Optional ntfy on `needs_human` / `blocked` / `ready` (`--ntfy-topic` or `LINE_NTFY_TOPIC`).
   - Loopback UI: `line serve` on `127.0.0.1:7340` (`docs/line.md`).
 
+## v3.3.0 — Bidirectional Multi-Device Sync Engine (skillvault-sync)
+
+**2026-10-04**
+
+### Added
+
+- **Bidirectional Multi-Device Sync Engine (`skillvault-sync`)**:
+  - Dedicated zero-dependency synchronization and merge engine for SkillVault (`tools/skillvault-sync/skillvault_sync.py`).
+  - Conforms to the private backup repository standard [`QuantumEdu/skill-vault-backp`](https://github.com/QuantumEdu/skill-vault-backp).
+  - Subcommands: `skillvault-sync status`, `init`, `pull`, `snapshot`, `unify`, `apply`, `sync`.
+  - **Two-Way Merge (True Sync)**: Reconciles entries and projects concurrently modified across machines using **Last-Write-Wins (LWW)** on ISO `updated_at` timestamps, set union of tags and graph edges, and slug conflict resolution.
+  - **Atomic Snapshots**: Consistent non-blocking snapshots using SQLite `VACUUM INTO` to prevent WAL lock contention (`SQLITE_BUSY`).
+  - **FTS5 Virtual Table Rebuild**: Automatically executes `INSERT INTO entries_fts(entries_fts) VALUES('rebuild')` after every unification.
+  - **Agent-Readable Markdown Catalog**: Exports individual entries as Markdown with YAML frontmatter in `data/entries/<slug>.md`, JSON entity dumps (`data/projects.json`, `data/entries.json`), and regenerates the repository `README.md` catalog with markdown tables.
+  - **Pre-Apply Safety Backup**: Automatically creates `~/.skillvault/exports/pre-apply-backup-<timestamp>.db` before applying unified databases.
+- **Skill Specification (`skills/skillvault-sync/SKILL.md`)**:
+  - Full skill guide installed into active agent runtimes (`~/.gemini/config/skills/skillvault-sync/SKILL.md`).
+  - Integrated into step 4 of `q:session-wrap` for automated end-of-session synchronization.
+
+### Fixed
+
+- **CLI Flag Offset in `ParseSyncFlags`**:
+  - Resolved argument parsing offset bug where normalized commands (`sync-push`, `sync-pull`) caused `--transport` flags to be skipped. Added unit test in `internal/cli/cli_test.go`.
+
 ## v3.2.0 — Links, Bookmarks & Command Instruction Recipes
 
 **2026-10-02**

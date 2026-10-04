@@ -1,12 +1,12 @@
 ---
 name: q:skillvault
 description: "Trigger: /q-skillvault, /skillvault, skillvault, q-skillvault, vault de skills, knowledge vault, base de conocimiento, line factory, mcp skillvault, context bundle. Knowledge Operating System local-first para desarrolladores y agentes IA: almacenamiento híbrido (SQLite+FTS5), compilación contextual de 7 modos, MCP stdio server, router semántico y fábrica determinista issue-to-PR (line)."
-version: 3.2.0
+version: 3.3.0
 license: MIT
 metadata:
   author: Gabriel Magallon Sanchez - Qu@antum
   date: "2026-09-19"
-  updated_at: "2026-10-02"
+  updated_at: "2026-10-04"
   repository: "https://github.com/QuantumEdu/q-skillvault"
 ---
 
@@ -93,6 +93,12 @@ skillvault cmd get ff-compress --var input=raw.mov --var crf=28 --var output=out
 skillvault cmd get git-rebase --var count=3 --copy # Resuelve e inyecta al clipboard nativo (WSL/Linux/macOS)
 skillvault cmd search "ffmpeg"      # Búsqueda FTS5 en recetas y comandos
 skillvault cmd list                 # Listado de comandos y sus placeholders
+
+# Sincronización bidireccional y respaldo multi-máquina (Sync & Backup)
+skillvault-sync status              # Estado y diferencias local vs GitHub (skill-vault-backp)
+skillvault-sync sync                # Sincronización completa (Pull + Merge LWW + Apply + Push)
+skillvault-sync snapshot            # Snapshot atómico (VACUUM INTO) y subida a GitHub
+skillvault-sync pull                # Descargar últimos commits remotos
 ```
 
 ### 2. Fábrica Determinista Issue-to-PR (`line`)
