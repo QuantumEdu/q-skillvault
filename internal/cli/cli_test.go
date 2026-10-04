@@ -774,6 +774,11 @@ func TestParseSyncFlags(t *testing.T) {
 			want: SyncFlags{Transport: "github", RemotePath: "", DryRun: true},
 		},
 		{
+			name: "normalized sync-push with flags",
+			args: []string{"skillvault", "sync-push", "--transport", "s3", "--remote-path", "vault.gz"},
+			want: SyncFlags{Transport: "s3", RemotePath: "vault.gz", DryRun: false},
+		},
+		{
 			name:    "missing transport flag",
 			args:    []string{"skillvault", "sync", "push", "--remote-path", "vault.gz"},
 			wantErr: true,

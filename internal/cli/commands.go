@@ -1091,8 +1091,12 @@ func ParseSyncFlags(args []string) (*SyncFlags, error) {
 	fs.BoolVar(&flags.DryRun, "dry-run", false, "Show what would be transferred without actually doing it")
 	fs.SetOutput(&nullWriter{})
 
-	if len(args) > 3 {
-		if err := fs.Parse(args[3:]); err != nil {
+	parseFrom := 3
+	if len(args) >= 2 && (args[1] == "sync-push" || args[1] == "sync-pull") {
+		parseFrom = 2
+	}
+	if len(args) > parseFrom {
+		if err := fs.Parse(args[parseFrom:]); err != nil {
 			return nil, fmt.Errorf("parse sync flags: %w", err)
 		}
 	}
