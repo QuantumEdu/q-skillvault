@@ -159,6 +159,12 @@ Para exponer el conocimiento del vault a agentes (Claude Code, OpenCode, Cursor,
 - `get_instruction(alias, vars)`: Resuelve instrucción por alias interpolando variables provistas.
 - `search_instructions(query, project, limit)`: Búsqueda FTS5 entre recetas de comandos guardadas.
 - `list_instructions(project)`: Lista todas las instrucciones y recetas registradas.
+- `vault_mem_save(title, content, type, project, topic_key)`: Guarda observación episódica con deduplicación normalizada SHA-256.
+- `vault_mem_search(query, project, topic_key, type, limit)`: Búsqueda FTS5 con preview de 300 caracteres.
+- `vault_mem_get(id)`: Lectura completa de observación por ID.
+- `vault_mem_timeline(id, before, after, project)`: Contexto cronológico previo y posterior a una observación.
+- `vault_mem_context(project)`: Compila context pack de memoria episódica para agentes.
+- *(Modo `--compat-engram`)*: Expone además los alias canónicos `mem_save`, `mem_search`, `mem_get_observation`, `mem_timeline`, `mem_context`.
 
 ---
 

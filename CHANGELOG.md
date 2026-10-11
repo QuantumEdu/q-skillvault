@@ -12,6 +12,30 @@ All notable changes to SkillVault Qu@ntum are documented here.
   - Optional ntfy on `needs_human` / `blocked` / `ready` (`--ntfy-topic` or `LINE_NTFY_TOPIC`).
   - Loopback UI: `line serve` on `127.0.0.1:7340` (`docs/line.md`).
 
+## v3.4.0 — Episodic Memory Suite (vault_mem_*) & Engram Compatibility Mode
+
+**2026-10-11**
+
+### Added
+
+- **Episodic Memory MCP Suite (`vault_mem_*`)**:
+  - `vault_mem_save`: Saves typed observations (`decision`, `architecture`, `bugfix`, `pattern`, `discovery`, `config`, `workflow`, `prompt`) with automated title generation, tag taxonomy, and deduplication.
+  - `vault_mem_search`: Full-text search with preview truncation (up to 300 characters) and filtering by `project`, `topic_key`, and `type`.
+  - `vault_mem_get`: Retrieves full observation content by ID or slug.
+  - `vault_mem_timeline`: Retrieves chronological sibling observations (before and after) surrounding a target observation ID.
+  - `vault_mem_context`: Compiles compact, agent-ready project context packs.
+- **Automated Normalized Hash Deduplication**:
+  - Automatically calculates SHA-256 hex digest of trimmed, lowercased content (`sha256(trim(to_lower(content)))`).
+  - Stores hash fingerprint in `external_ref = "hash:<hex>"`.
+  - On duplicate observation save attempts within the same project, SkillVault returns the existing entry with `deduplicated: true` without creating redundant database records.
+- **Engram Compatibility Mode (`--compat-engram`)**:
+  - CLI flag `skillvault mcp --compat-engram` and environment variable `SKILLVAULT_COMPAT_ENGRAM=1`.
+  - Registers canonical drop-in aliases: `mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, and `mem_timeline`.
+  - Enables AI agents to use SkillVault as a 100% transparent drop-in replacement for Engram with zero prompt changes.
+  - Default mode preserves zero-collision behavior (39 tools default; 44 tools in compat mode).
+- **Millisecond Timestamp Precision in SQLite**:
+  - Updated `internal/db/entries_store.go` to record timestamps with millisecond resolution (`strftime('%Y-%m-%d %H:%M:%f', 'now')`) ensuring strict chronological timeline ordering.
+
 ## v3.3.0 — Bidirectional Multi-Device Sync Engine (skillvault-sync)
 
 **2026-10-04**

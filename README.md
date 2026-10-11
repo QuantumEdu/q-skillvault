@@ -414,9 +414,9 @@ For full documentation, see [`docs/telemetry.md`](docs/telemetry.md).
 
 ---
 
-## MCP Tools (34)
+## MCP Tools (39 default, 44 engram-compat)
 
-For AI agents (Claude Code, OpenCode, etc.):
+For AI agents (Claude Code, OpenCode, Antigravity, Pi, Codex):
 
 | Tool | Description |
 |------|-------------|
@@ -454,8 +454,23 @@ For AI agents (Claude Code, OpenCode, etc.):
 | `get_instruction` | Resolve an instruction recipe by alias with optional variable interpolation |
 | `search_instructions` | Search instruction recipes and command snippets with FTS5 |
 | `list_instructions` | List all stored instruction recipes, optionally filtered by project |
+| `vault_mem_save` | Save typed observation with normalized hash deduplication and topic tags |
+| `vault_mem_search` | Search observations with FTS5, topic/project filters, and 300-char preview |
+| `vault_mem_get` | Retrieve full observation details by ID or slug |
+| `vault_mem_timeline` | Retrieve chronological sibling observations before and after target ID |
+| `vault_mem_context` | Compile agent-ready project context pack from active memories |
 
-### MCP Setup (Claude Code / OpenCode)
+### Engram Drop-in Compatibility Mode (`--compat-engram`)
+
+To run SkillVault as a 100% drop-in replacement for Engram (exposing `mem_save`, `mem_search`, `mem_context`, `mem_get_observation`, `mem_timeline` aliases with zero prompt changes):
+
+```bash
+skillvault mcp --compat-engram
+```
+
+Or set the environment variable `SKILLVAULT_COMPAT_ENGRAM=1`.
+
+### MCP Setup (Claude Code / OpenCode / Antigravity)
 
 Add to your MCP configuration:
 
