@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/quantum-6/skillvault/internal/mcp"
@@ -14,6 +15,17 @@ import (
 func RunMCP() {
 	svc := OpenVault()
 
+	compatEngram := false
+	for _, arg := range os.Args {
+		if arg == "--compat-engram" {
+			compatEngram = true
+			break
+		}
+	}
+	if v := os.Getenv("SKILLVAULT_COMPAT_ENGRAM"); v == "1" || strings.EqualFold(v, "true") {
+		compatEngram = true
+	}
+
 	reg := mcp.NewServiceToolRegistry(
 		svc.entrySvc,
 		svc.artifactSvc,
@@ -22,7 +34,7 @@ func RunMCP() {
 		svc.workflowSvc,
 		svc.sessionSvc,
 		svc.projectSvc,
-	).WithEntryRefService(svc.entryRefSvc).WithCompareService(svc.compareSvc).WithSaveResultService(svc.saveResultSvc).WithWorkflowRunService(svc.workflowRunSvc).WithStatsService(svc.statsSvc).WithEntryVersionService(svc.entryVersionSvc).WithLinkService(svc.linkSvc).WithInstructionService(svc.instructionSvc)
+	).WithEntryRefService(svc.entryRefSvc).WithCompareService(svc.compareSvc).WithSaveResultService(svc.saveResultSvc).WithWorkflowRunService(svc.workflowRunSvc).WithStatsService(svc.statsSvc).WithEntryVersionService(svc.entryVersionSvc).WithLinkService(svc.linkSvc).WithInstructionService(svc.instructionSvc).WithVaultMemService(svc.vaultMemSvc).WithCompatEngram(compatEngram)
 	server := mcp.NewServer(reg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

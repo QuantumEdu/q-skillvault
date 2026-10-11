@@ -38,6 +38,7 @@ type Services struct {
 	statsSvc        *app.StatsService
 	linkSvc         *app.LinkService
 	instructionSvc  *app.InstructionService
+	vaultMemSvc     *app.VaultMemService
 	fileSvc         *files.ArtifactFileService
 	scanner         *security.SecretScanner
 	syncSvc         *app.SyncService
@@ -51,6 +52,9 @@ func (s *Services) ProjectService() *app.ProjectService { return s.projectSvc }
 
 // ContextService exposes the context service to the TUI entry point.
 func (s *Services) ContextService() *app.ContextService { return s.contextSvc }
+
+// VaultMemService exposes the vault memory service.
+func (s *Services) VaultMemService() *app.VaultMemService { return s.vaultMemSvc }
 
 func vaultDir() string {
 	home, err := os.UserHomeDir()
@@ -150,6 +154,7 @@ func openVault() *Services {
 	syncSvc := app.NewSyncService(exportSvc, importSvc, gzipTransport)
 	linkSvc := app.NewLinkService(entrySvc)
 	instructionSvc := app.NewInstructionService(entrySvc)
+	vaultMemSvc := app.NewVaultMemService(store.Entries, store.Projects, entrySvc, contextSvc).WithDB(sqlDB)
 
 	return &Services{
 		store:           store,
@@ -173,6 +178,7 @@ func openVault() *Services {
 		statsSvc:        statsSvc,
 		linkSvc:         linkSvc,
 		instructionSvc:  instructionSvc,
+		vaultMemSvc:     vaultMemSvc,
 		fileSvc:         fileSvc,
 		scanner:         scanner,
 		syncSvc:         syncSvc,

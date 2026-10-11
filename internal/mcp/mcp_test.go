@@ -41,7 +41,8 @@ func setupMCPServices(t *testing.T) (*ToolRegistry, *app.ProjectService, func())
 
 	linkSvc := app.NewLinkService(entrySvc)
 	instructionSvc := app.NewInstructionService(entrySvc)
-	reg := NewServiceToolRegistry(entrySvc, artifactSvc, contextSvc, seriesSvc, workflowSvc, sessionSvc, projectSvc).WithEntryRefService(entryRefSvc).WithWorkflowRunService(workflowRunSvc).WithEntryVersionService(entryVersionSvc).WithLinkService(linkSvc).WithInstructionService(instructionSvc)
+	vaultMemSvc := app.NewVaultMemService(store.Entries, store.Projects, entrySvc, contextSvc).WithDB(sqlDB)
+	reg := NewServiceToolRegistry(entrySvc, artifactSvc, contextSvc, seriesSvc, workflowSvc, sessionSvc, projectSvc).WithEntryRefService(entryRefSvc).WithWorkflowRunService(workflowRunSvc).WithEntryVersionService(entryVersionSvc).WithLinkService(linkSvc).WithInstructionService(instructionSvc).WithVaultMemService(vaultMemSvc)
 	cleanup := func() { sqlDB.Close() }
 	return reg, projectSvc, cleanup
 }
@@ -99,8 +100,8 @@ func TestToolsListReturns24Tools(t *testing.T) {
 	default:
 		t.Fatalf("tools is not an array: %T", toolsRaw)
 	}
-	if toolCount != 34 {
-		t.Errorf("expected 34 tools, got %d", toolCount)
+	if toolCount != 39 {
+		t.Errorf("expected 39 tools, got %d", toolCount)
 	}
 }
 
@@ -322,6 +323,11 @@ func TestToolNamesAreCorrect(t *testing.T) {
 		"get_instruction",
 		"search_instructions",
 		"list_instructions",
+		"vault_mem_save",
+		"vault_mem_search",
+		"vault_mem_get",
+		"vault_mem_timeline",
+		"vault_mem_context",
 	}
 
 	if len(names) != len(expected) {
@@ -1273,15 +1279,15 @@ func TestToolCountIncludesNewTools(t *testing.T) {
 	reg := NewToolRegistry(nil)
 	tools := reg.List()
 
-	// Should be 34 tools: 30 existing + 4 instruction tools
-	if len(tools) != 34 {
-		t.Errorf("expected 34 tools, got %d", len(tools))
+	// Should be 39 tools: 34 existing + 5 memory tools
+	if len(tools) != 39 {
+		t.Errorf("expected 39 tools, got %d", len(tools))
 	}
 	names := make(map[string]bool)
 	for _, tool := range tools {
 		names[tool.Name] = true
 	}
-	for _, name := range []string{"run_workflow", "route_scenario", "get_stats", "list_workflow_runs", "get_run", "list_entry_versions", "restore_entry_version", "save_handoff", "get_handoff", "add_link", "get_link", "search_links", "list_links", "add_instruction", "get_instruction", "search_instructions", "list_instructions"} {
+	for _, name := range []string{"run_workflow", "route_scenario", "get_stats", "list_workflow_runs", "get_run", "list_entry_versions", "restore_entry_version", "save_handoff", "get_handoff", "add_link", "get_link", "search_links", "list_links", "add_instruction", "get_instruction", "search_instructions", "list_instructions", "vault_mem_save", "vault_mem_search", "vault_mem_get", "vault_mem_timeline", "vault_mem_context"} {
 		if !names[name] {
 			t.Errorf("expected tool %q to be registered", name)
 		}
@@ -1739,6 +1745,375 @@ func TestSearchEntries_VectorFallback(t *testing.T) {
 	}
 	if !strings.Contains(res.Content[0].Text, "Vector Fallback Test Entry") {
 		t.Errorf("expected FTS5 fallback to find entry, got: %s", res.Content[0].Text)
+	}
+}
+
+func TestVaultMemSaveAndDedupMCP(t *testing.T) {
+	reg, _, cleanup := setupMCPServices(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// 1. Initial save
+	res, err := reg.Call(ctx, "vault_mem_save", map[string]interface{}{
+		"content":   "Use SQLite WAL mode for fast concurrency",
+		"title":     "SQLite WAL Decision",
+		"type":      "decision",
+		"project":   "lifeos",
+		"topic_key": "odd/tasks/db",
+		"scope":     "project",
+		"tags":      []interface{}{"sqlite", "perf"},
+	})
+	if err != nil {
+		t.Fatalf("vault_mem_save failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("vault_mem_save error: %s", res.Content[0].Text)
+	}
+
+	var saveRes app.VaultMemSaveResult
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &saveRes); err != nil {
+		t.Fatalf("failed to unmarshal save result: %v", err)
+	}
+	if saveRes.ID == "" {
+		t.Error("expected non-empty ID in save result")
+	}
+	if saveRes.Deduplicated {
+		t.Error("expected first save to not be deduplicated")
+	}
+	if saveRes.TopicKey != "odd/tasks/db" {
+		t.Errorf("expected topic_key 'odd/tasks/db', got %q", saveRes.TopicKey)
+	}
+
+	// 2. Duplicate save with matching content (different whitespace/case)
+	res2, err := reg.Call(ctx, "vault_mem_save", map[string]interface{}{
+		"content": "  use sqlite wal mode for fast concurrency  \n",
+		"project": "lifeos",
+	})
+	if err != nil {
+		t.Fatalf("vault_mem_save second call failed: %v", err)
+	}
+	if res2.IsError {
+		t.Fatalf("vault_mem_save second call error: %s", res2.Content[0].Text)
+	}
+
+	var saveRes2 app.VaultMemSaveResult
+	if err := json.Unmarshal([]byte(res2.Content[0].Text), &saveRes2); err != nil {
+		t.Fatalf("failed to unmarshal dedup save result: %v", err)
+	}
+	if !saveRes2.Deduplicated {
+		t.Error("expected second save to be deduplicated")
+	}
+	if saveRes2.ID != saveRes.ID {
+		t.Errorf("expected deduplicated ID to match original %q, got %q", saveRes.ID, saveRes2.ID)
+	}
+}
+
+func TestVaultMemSearchMCP(t *testing.T) {
+	reg, _, cleanup := setupMCPServices(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Seed observations
+	_, err := reg.Call(ctx, "vault_mem_save", map[string]interface{}{
+		"content":   "Always validate authentication tokens in middleware",
+		"title":     "Auth Tokens Policy",
+		"type":      "architecture",
+		"project":   "searchproj",
+		"topic_key": "odd/tasks/auth",
+	})
+	if err != nil {
+		t.Fatalf("seed auth mem failed: %v", err)
+	}
+
+	_, err = reg.Call(ctx, "vault_mem_save", map[string]interface{}{
+		"content":   "Configure pool size to 10 connections for SQLite",
+		"title":     "DB Pool Config",
+		"type":      "config",
+		"project":   "searchproj",
+		"topic":     "odd/tasks/db",
+	})
+	if err != nil {
+		t.Fatalf("seed db mem failed: %v", err)
+	}
+
+	// Search by query
+	searchRes, err := reg.Call(ctx, "vault_mem_search", map[string]interface{}{
+		"query":   "tokens",
+		"project": "searchproj",
+	})
+	if err != nil {
+		t.Fatalf("vault_mem_search failed: %v", err)
+	}
+	if searchRes.IsError {
+		t.Fatalf("vault_mem_search error: %s", searchRes.Content[0].Text)
+	}
+
+	var results []app.VaultMemSearchResult
+	if err := json.Unmarshal([]byte(searchRes.Content[0].Text), &results); err != nil {
+		t.Fatalf("unmarshal search results failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if !strings.Contains(results[0].Preview, "authentication tokens") {
+		t.Errorf("expected preview to contain 'authentication tokens', got %q", results[0].Preview)
+	}
+
+	// Search by topic alias
+	topicRes, err := reg.Call(ctx, "vault_mem_search", map[string]interface{}{
+		"project": "searchproj",
+		"topic":   "odd/tasks/db",
+	})
+	if err != nil {
+		t.Fatalf("vault_mem_search by topic failed: %v", err)
+	}
+	if topicRes.IsError {
+		t.Fatalf("vault_mem_search by topic error: %s", topicRes.Content[0].Text)
+	}
+	var topicResults []app.VaultMemSearchResult
+	if err := json.Unmarshal([]byte(topicRes.Content[0].Text), &topicResults); err != nil {
+		t.Fatalf("unmarshal topic results failed: %v", err)
+	}
+	if len(topicResults) != 1 {
+		t.Fatalf("expected 1 result by topic, got %d", len(topicResults))
+	}
+	if topicResults[0].Title != "DB Pool Config" {
+		t.Errorf("expected 'DB Pool Config', got %q", topicResults[0].Title)
+	}
+}
+
+func TestVaultMemGetMCP(t *testing.T) {
+	reg, _, cleanup := setupMCPServices(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	saveRes, err := reg.Call(ctx, "vault_mem_save", map[string]interface{}{
+		"content":   "Detailed observation content for verification test",
+		"title":     "Get Observation Test",
+		"type":      "discovery",
+		"project":   "getproj",
+		"topic_key": "odd/tasks/testing",
+		"tags":      []interface{}{"tag1", "tag2"},
+	})
+	if err != nil || saveRes.IsError {
+		t.Fatalf("vault_mem_save failed: %v, %s", err, saveRes.Content[0].Text)
+	}
+	var saved app.VaultMemSaveResult
+	json.Unmarshal([]byte(saveRes.Content[0].Text), &saved)
+
+	// Get using "id"
+	getRes, err := reg.Call(ctx, "vault_mem_get", map[string]interface{}{
+		"id": saved.ID,
+	})
+	if err != nil || getRes.IsError {
+		t.Fatalf("vault_mem_get failed: %v, %s", err, getRes.Content[0].Text)
+	}
+	var got app.VaultMemGetResult
+	if err := json.Unmarshal([]byte(getRes.Content[0].Text), &got); err != nil {
+		t.Fatalf("unmarshal get result failed: %v", err)
+	}
+	if got.ID != saved.ID || got.Title != "Get Observation Test" {
+		t.Errorf("got unexpected data: %+v", got)
+	}
+	if got.Content != "Detailed observation content for verification test" {
+		t.Errorf("got unexpected content: %q", got.Content)
+	}
+
+	// Get using "observation_id" alias
+	getResAlias, err := reg.Call(ctx, "vault_mem_get", map[string]interface{}{
+		"observation_id": saved.ID,
+	})
+	if err != nil || getResAlias.IsError {
+		t.Fatalf("vault_mem_get alias failed: %v, %s", err, getResAlias.Content[0].Text)
+	}
+
+	// Get nonexistent ID
+	missingRes, _ := reg.Call(ctx, "vault_mem_get", map[string]interface{}{
+		"id": "nonexistent-id",
+	})
+	if !missingRes.IsError {
+		t.Error("expected error for nonexistent memory ID")
+	}
+}
+
+func TestVaultMemTimelineMCP(t *testing.T) {
+	reg, _, cleanup := setupMCPServices(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Seed 3 sequential entries
+	var ids []string
+	for i := 1; i <= 3; i++ {
+		res, err := reg.Call(ctx, "vault_mem_save", map[string]interface{}{
+			"content": fmt.Sprintf("Event step %d in chronological order", i),
+			"title":   fmt.Sprintf("Step %d", i),
+			"project": "timelineproj",
+		})
+		if err != nil || res.IsError {
+			t.Fatalf("seed step %d failed: %v", i, err)
+		}
+		var s app.VaultMemSaveResult
+		json.Unmarshal([]byte(res.Content[0].Text), &s)
+		ids = append(ids, s.ID)
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Get timeline around step 2
+	timelineRes, err := reg.Call(ctx, "vault_mem_timeline", map[string]interface{}{
+		"id":      ids[1],
+		"before":  1,
+		"after":   1,
+		"project": "timelineproj",
+	})
+	if err != nil || timelineRes.IsError {
+		t.Fatalf("vault_mem_timeline failed: %v, %s", err, timelineRes.Content[0].Text)
+	}
+
+	var timeline app.VaultMemTimelineResult
+	if err := json.Unmarshal([]byte(timelineRes.Content[0].Text), &timeline); err != nil {
+		t.Fatalf("unmarshal timeline failed: %v", err)
+	}
+	if timeline.Target.ID != ids[1] {
+		t.Errorf("expected target ID %q, got %q", ids[1], timeline.Target.ID)
+	}
+	if len(timeline.Before) != 1 {
+		t.Errorf("expected 1 before item, got %d", len(timeline.Before))
+	} else if timeline.Before[0].ID != ids[0] {
+		t.Errorf("expected before item %q, got %q", ids[0], timeline.Before[0].ID)
+	}
+	if len(timeline.After) != 1 {
+		t.Errorf("expected 1 after item, got %d", len(timeline.After))
+	} else if timeline.After[0].ID != ids[2] {
+		t.Errorf("expected after item %q, got %q", ids[2], timeline.After[0].ID)
+	}
+
+	// Test observation_id alias
+	aliasRes, err := reg.Call(ctx, "vault_mem_timeline", map[string]interface{}{
+		"observation_id": ids[1],
+		"before":         1,
+		"after":          1,
+	})
+	if err != nil || aliasRes.IsError {
+		t.Fatalf("vault_mem_timeline observation_id alias failed: %v", err)
+	}
+}
+
+func TestVaultMemContextMCP(t *testing.T) {
+	reg, _, cleanup := setupMCPServices(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := reg.Call(ctx, "vault_mem_save", map[string]interface{}{
+		"content": "Key decision: Use pure Go with zero CGO dependencies.",
+		"title":   "CGO Decision",
+		"type":    "decision",
+		"project": "ctxproj",
+	})
+	if err != nil {
+		t.Fatalf("seed memory failed: %v", err)
+	}
+
+	res, err := reg.Call(ctx, "vault_mem_context", map[string]interface{}{
+		"project": "ctxproj",
+	})
+	if err != nil || res.IsError {
+		t.Fatalf("vault_mem_context failed: %v, %s", err, res.Content[0].Text)
+	}
+	if len(res.Content) == 0 || !strings.Contains(res.Content[0].Text, "ctxproj") {
+		t.Errorf("expected context pack to contain project name 'ctxproj', got: %s", res.Content[0].Text)
+	}
+
+	// Missing project parameter
+	badRes, err := reg.Call(ctx, "vault_mem_context", map[string]interface{}{})
+	if err != nil || !badRes.IsError {
+		t.Error("expected error when project argument is omitted")
+	}
+}
+
+func TestCompatEngramMCP(t *testing.T) {
+	reg, _, cleanup := setupMCPServices(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Enable compatEngram mode
+	reg.WithCompatEngram(true)
+
+	// Tool count should be 39 + 5 = 44
+	tools := reg.List()
+	if len(tools) != 44 {
+		t.Errorf("expected 44 tools with compatEngram enabled, got %d", len(tools))
+	}
+
+	// Verify mem_save
+	saveRes, err := reg.Call(ctx, "mem_save", map[string]interface{}{
+		"content":   "Engram compat observation: verified memory aliases",
+		"title":     "Engram Compat Verification",
+		"type":      "workflow",
+		"project":   "compatproj",
+		"topic_key": "odd/tasks/compat",
+	})
+	if err != nil || saveRes.IsError {
+		t.Fatalf("mem_save failed: %v, %s", err, saveRes.Content[0].Text)
+	}
+	var saved app.VaultMemSaveResult
+	if err := json.Unmarshal([]byte(saveRes.Content[0].Text), &saved); err != nil {
+		t.Fatalf("unmarshal mem_save failed: %v", err)
+	}
+	if saved.ID == "" {
+		t.Fatal("expected ID from mem_save")
+	}
+
+	// Verify mem_search
+	searchRes, err := reg.Call(ctx, "mem_search", map[string]interface{}{
+		"query":   "verified",
+		"project": "compatproj",
+	})
+	if err != nil || searchRes.IsError {
+		t.Fatalf("mem_search failed: %v, %s", err, searchRes.Content[0].Text)
+	}
+	var searchList []app.VaultMemSearchResult
+	json.Unmarshal([]byte(searchRes.Content[0].Text), &searchList)
+	if len(searchList) != 1 {
+		t.Fatalf("expected 1 result from mem_search, got %d", len(searchList))
+	}
+
+	// Verify mem_get_observation
+	getRes, err := reg.Call(ctx, "mem_get_observation", map[string]interface{}{
+		"observation_id": saved.ID,
+	})
+	if err != nil || getRes.IsError {
+		t.Fatalf("mem_get_observation failed: %v, %s", err, getRes.Content[0].Text)
+	}
+	var got app.VaultMemGetResult
+	json.Unmarshal([]byte(getRes.Content[0].Text), &got)
+	if got.ID != saved.ID {
+		t.Errorf("expected %q, got %q", saved.ID, got.ID)
+	}
+
+	// Verify mem_timeline
+	timelineRes, err := reg.Call(ctx, "mem_timeline", map[string]interface{}{
+		"observation_id": saved.ID,
+		"before":         2,
+		"after":          2,
+	})
+	if err != nil || timelineRes.IsError {
+		t.Fatalf("mem_timeline failed: %v, %s", err, timelineRes.Content[0].Text)
+	}
+	var timeline app.VaultMemTimelineResult
+	json.Unmarshal([]byte(timelineRes.Content[0].Text), &timeline)
+	if timeline.Target.ID != saved.ID {
+		t.Errorf("expected target %q, got %q", saved.ID, timeline.Target.ID)
+	}
+
+	// Verify mem_context
+	ctxRes, err := reg.Call(ctx, "mem_context", map[string]interface{}{
+		"project": "compatproj",
+	})
+	if err != nil || ctxRes.IsError {
+		t.Fatalf("mem_context failed: %v, %s", err, ctxRes.Content[0].Text)
+	}
+	if !strings.Contains(ctxRes.Content[0].Text, "compatproj") {
+		t.Errorf("expected context to contain 'compatproj', got: %s", ctxRes.Content[0].Text)
 	}
 }
 
