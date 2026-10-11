@@ -5,9 +5,27 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/quantum-6/skillvault/internal/domain"
 )
+
+func parseSQLiteTime(s string) (time.Time, error) {
+	formats := []string{
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05.999",
+		"2006-01-02 15:04:05",
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05",
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unable to parse time: %s", s)
+}
 
 func (s *sqliteEntryStore) Save(ctx context.Context, entry domain.Entry, tags []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -46,9 +64,14 @@ func (s *sqliteEntryStore) Save(ctx context.Context, entry domain.Entry, tags []
 		return fmt.Errorf("archive previous version: %w", archiveErr)
 	}
 
+	var createdAtVal interface{} = nil
+	if !entry.CreatedAt.IsZero() {
+		createdAtVal = entry.CreatedAt.UTC().Format("2006-01-02 15:04:05.000")
+	}
+
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO entries (id, name, title, slug, type, content, summary, body_optional, purpose, status, project_id, artifact_id, external_ref, tags_denorm, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO entries (id, name, title, slug, type, content, summary, body_optional, purpose, status, project_id, artifact_id, external_ref, tags_denorm, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), strftime('%Y-%m-%d %H:%M:%f', 'now')), strftime('%Y-%m-%d %H:%M:%f', 'now'))
 		ON CONFLICT(id) DO UPDATE SET
 			name=excluded.name,
 			title=excluded.title,
@@ -63,8 +86,8 @@ func (s *sqliteEntryStore) Save(ctx context.Context, entry domain.Entry, tags []
 			artifact_id=excluded.artifact_id,
 			external_ref=excluded.external_ref,
 			tags_denorm=excluded.tags_denorm,
-			updated_at=CURRENT_TIMESTAMP
-	`, entry.ID, entry.Title, entry.Title, entry.Slug, string(entry.Type), entry.BodyOptional, entry.Summary, entry.BodyOptional, string(entry.Purpose), string(entry.Status), projectID, artifactID, entry.ExternalRef, tagsDenorm)
+			updated_at=strftime('%Y-%m-%d %H:%M:%f', 'now')
+	`, entry.ID, entry.Title, entry.Title, entry.Slug, string(entry.Type), entry.BodyOptional, entry.Summary, entry.BodyOptional, string(entry.Purpose), string(entry.Status), projectID, artifactID, entry.ExternalRef, tagsDenorm, createdAtVal)
 	if err != nil {
 		return fmt.Errorf("upsert entry: %w", err)
 	}
@@ -141,12 +164,14 @@ func (s *sqliteEntryStore) Get(ctx context.Context, id string, includeArchived b
 	var summary sql.NullString
 	var bodyOptional sql.NullString
 	var status string
+	var createdAtStr sql.NullString
+	var updatedAtStr sql.NullString
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, title, slug, type, purpose, project_id, summary, body_optional, status, artifact_id, COALESCE(external_ref,'')
+		SELECT id, title, slug, type, purpose, project_id, summary, body_optional, status, artifact_id, COALESCE(external_ref,''), COALESCE(created_at, ''), COALESCE(updated_at, '')
 		FROM entries WHERE (id = ? OR slug = ?)
 	`, id, id).Scan(&result.Entry.ID, &result.Entry.Title, &result.Entry.Slug, &result.Entry.Type,
-		&result.Entry.Purpose, &projectID, &summary, &bodyOptional, &status, &artifactID, &result.Entry.ExternalRef)
+		&result.Entry.Purpose, &projectID, &summary, &bodyOptional, &status, &artifactID, &result.Entry.ExternalRef, &createdAtStr, &updatedAtStr)
 	if err == sql.ErrNoRows {
 		return result, fmt.Errorf("entry %q not found", id)
 	}
@@ -166,6 +191,16 @@ func (s *sqliteEntryStore) Get(ctx context.Context, id string, includeArchived b
 	}
 	if bodyOptional.Valid {
 		result.Entry.BodyOptional = bodyOptional.String
+	}
+	if createdAtStr.Valid && createdAtStr.String != "" {
+		if t, err := parseSQLiteTime(createdAtStr.String); err == nil {
+			result.Entry.CreatedAt = t
+		}
+	}
+	if updatedAtStr.Valid && updatedAtStr.String != "" {
+		if t, err := parseSQLiteTime(updatedAtStr.String); err == nil {
+			result.Entry.UpdatedAt = t
+		}
 	}
 
 	if !includeArchived && result.Entry.Status == domain.StatusArchived {
@@ -197,7 +232,7 @@ func (s *sqliteEntryStore) Search(ctx context.Context, q domain.SearchQuery) ([]
 		args = append(args, q.Query)
 	}
 
-	query := `SELECT e.id, e.title, e.slug, e.type, e.purpose, e.project_id, e.summary, e.body_optional, e.status, e.artifact_id, COALESCE(e.external_ref,'')
+	query := `SELECT e.id, e.title, e.slug, e.type, e.purpose, e.project_id, e.summary, e.body_optional, e.status, e.artifact_id, COALESCE(e.external_ref,''), COALESCE(e.created_at, ''), COALESCE(e.updated_at, '')
 		FROM entries_fts e_fts
 		JOIN entries e ON e.id = e_fts.id`
 
@@ -247,8 +282,10 @@ func (s *sqliteEntryStore) Search(ctx context.Context, q domain.SearchQuery) ([]
 		var summary sql.NullString
 		var bodyOptional sql.NullString
 		var status string
+		var createdAtStr sql.NullString
+		var updatedAtStr sql.NullString
 		if err := rows.Scan(&r.Entry.ID, &r.Entry.Title, &r.Entry.Slug, &r.Entry.Type, &r.Entry.Purpose, &projectID,
-			&summary, &bodyOptional, &status, &artifactID, &r.Entry.ExternalRef); err != nil {
+			&summary, &bodyOptional, &status, &artifactID, &r.Entry.ExternalRef, &createdAtStr, &updatedAtStr); err != nil {
 			return nil, fmt.Errorf("scan search result: %w", err)
 		}
 		r.Entry.Status = domain.Status(status)
@@ -263,6 +300,16 @@ func (s *sqliteEntryStore) Search(ctx context.Context, q domain.SearchQuery) ([]
 		}
 		if bodyOptional.Valid {
 			r.Entry.BodyOptional = bodyOptional.String
+		}
+		if createdAtStr.Valid && createdAtStr.String != "" {
+			if t, err := parseSQLiteTime(createdAtStr.String); err == nil {
+				r.Entry.CreatedAt = t
+			}
+		}
+		if updatedAtStr.Valid && updatedAtStr.String != "" {
+			if t, err := parseSQLiteTime(updatedAtStr.String); err == nil {
+				r.Entry.UpdatedAt = t
+			}
 		}
 
 		tagRows, err := s.db.QueryContext(ctx, "SELECT tag FROM entry_tags WHERE entry_id = ? ORDER BY tag", r.Entry.ID)
@@ -297,7 +344,7 @@ func (s *sqliteEntryStore) SearchByTags(ctx context.Context, tags []string, matc
 		limit = 20
 	}
 
-	query := "SELECT e.id, e.title, e.slug, e.type, e.purpose, e.project_id, e.summary, e.body_optional, e.status, e.artifact_id, COALESCE(e.external_ref,'') FROM entries e JOIN entry_tags et ON e.id = et.entry_id WHERE e.status != 'archived' AND et.tag IN (" + placeholders(len(tags)) + ")"
+	query := "SELECT e.id, e.title, e.slug, e.type, e.purpose, e.project_id, e.summary, e.body_optional, e.status, e.artifact_id, COALESCE(e.external_ref,''), COALESCE(e.created_at, ''), COALESCE(e.updated_at, '') FROM entries e JOIN entry_tags et ON e.id = et.entry_id WHERE e.status != 'archived' AND et.tag IN (" + placeholders(len(tags)) + ")"
 	var args []interface{}
 	for _, t := range tags {
 		args = append(args, t)
@@ -335,6 +382,8 @@ func (s *sqliteEntryStore) SearchByTags(ctx context.Context, tags []string, matc
 		summary      sql.NullString
 		bodyOptional sql.NullString
 		status       string
+		createdAt    sql.NullString
+		updatedAt    sql.NullString
 	}
 	var rowsData []row
 	var entryIDs []string
@@ -342,7 +391,7 @@ func (s *sqliteEntryStore) SearchByTags(ctx context.Context, tags []string, matc
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.result.Entry.ID, &r.result.Entry.Title, &r.result.Entry.Slug, &r.result.Entry.Type, &r.result.Entry.Purpose,
-			&r.projectID, &r.summary, &r.bodyOptional, &r.status, &r.artifactID, &r.result.Entry.ExternalRef); err != nil {
+			&r.projectID, &r.summary, &r.bodyOptional, &r.status, &r.artifactID, &r.result.Entry.ExternalRef, &r.createdAt, &r.updatedAt); err != nil {
 			return nil, fmt.Errorf("scan search by tags: %w", err)
 		}
 		r.result.Entry.Status = domain.Status(r.status)
@@ -357,6 +406,16 @@ func (s *sqliteEntryStore) SearchByTags(ctx context.Context, tags []string, matc
 		}
 		if r.bodyOptional.Valid {
 			r.result.Entry.BodyOptional = r.bodyOptional.String
+		}
+		if r.createdAt.Valid && r.createdAt.String != "" {
+			if t, err := parseSQLiteTime(r.createdAt.String); err == nil {
+				r.result.Entry.CreatedAt = t
+			}
+		}
+		if r.updatedAt.Valid && r.updatedAt.String != "" {
+			if t, err := parseSQLiteTime(r.updatedAt.String); err == nil {
+				r.result.Entry.UpdatedAt = t
+			}
 		}
 		rowsData = append(rowsData, r)
 		entryIDs = append(entryIDs, r.result.Entry.ID)
@@ -409,7 +468,7 @@ func (s *sqliteEntryStore) Archive(ctx context.Context, id string) error {
 }
 
 func (s *sqliteEntryStore) List(ctx context.Context, filter domain.EntryFilter) ([]domain.EntryListResult, error) {
-	query := "SELECT e.id, e.title, e.slug, e.type, e.purpose, e.project_id, e.summary, e.body_optional, e.status, e.artifact_id, COALESCE(e.external_ref,'') FROM entries e WHERE 1=1"
+	query := "SELECT e.id, e.title, e.slug, e.type, e.purpose, e.project_id, e.summary, e.body_optional, e.status, e.artifact_id, COALESCE(e.external_ref,''), COALESCE(e.created_at, ''), COALESCE(e.updated_at, '') FROM entries e WHERE 1=1"
 	var args []interface{}
 
 	if !filter.IncludeArchived {
@@ -438,6 +497,8 @@ func (s *sqliteEntryStore) List(ctx context.Context, filter domain.EntryFilter) 
 		summary      sql.NullString
 		bodyOptional sql.NullString
 		status       string
+		createdAt    sql.NullString
+		updatedAt    sql.NullString
 	}
 	var rowsData []row
 	var entryIDs []string
@@ -445,7 +506,7 @@ func (s *sqliteEntryStore) List(ctx context.Context, filter domain.EntryFilter) 
 	for rows.Next() {
 		var r row
 		if err := rows.Scan(&r.entry.Entry.ID, &r.entry.Entry.Title, &r.entry.Entry.Slug, &r.entry.Entry.Type, &r.entry.Entry.Purpose,
-			&r.projID, &r.summary, &r.bodyOptional, &r.status, &r.artifactID, &r.entry.Entry.ExternalRef); err != nil {
+			&r.projID, &r.summary, &r.bodyOptional, &r.status, &r.artifactID, &r.entry.Entry.ExternalRef, &r.createdAt, &r.updatedAt); err != nil {
 			return nil, fmt.Errorf("scan entry: %w", err)
 		}
 		r.entry.Entry.Status = domain.Status(r.status)
@@ -460,6 +521,16 @@ func (s *sqliteEntryStore) List(ctx context.Context, filter domain.EntryFilter) 
 		}
 		if r.bodyOptional.Valid {
 			r.entry.Entry.BodyOptional = r.bodyOptional.String
+		}
+		if r.createdAt.Valid && r.createdAt.String != "" {
+			if t, err := parseSQLiteTime(r.createdAt.String); err == nil {
+				r.entry.Entry.CreatedAt = t
+			}
+		}
+		if r.updatedAt.Valid && r.updatedAt.String != "" {
+			if t, err := parseSQLiteTime(r.updatedAt.String); err == nil {
+				r.entry.Entry.UpdatedAt = t
+			}
 		}
 		rowsData = append(rowsData, r)
 		entryIDs = append(entryIDs, r.entry.Entry.ID)

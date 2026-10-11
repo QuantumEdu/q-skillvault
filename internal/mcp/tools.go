@@ -35,6 +35,8 @@ type ToolRegistry struct {
 	statsSvc          *app.StatsService
 	linkSvc           *app.LinkService
 	instructionSvc    *app.InstructionService
+	vaultMemSvc       *app.VaultMemService
+	compatEngram      bool
 }
 
 // NewToolRegistry creates a registry with a generic handler (for testing).
@@ -90,6 +92,64 @@ func (r *ToolRegistry) WithLinkService(svc *app.LinkService) *ToolRegistry {
 func (r *ToolRegistry) WithInstructionService(svc *app.InstructionService) *ToolRegistry {
 	r.instructionSvc = svc
 	return r
+}
+
+// WithVaultMemService sets the vault memory service for episodic memory tools.
+func (r *ToolRegistry) WithVaultMemService(svc *app.VaultMemService) *ToolRegistry {
+	r.vaultMemSvc = svc
+	return r
+}
+
+// WithCompatEngram enables or disables Engram compatibility aliases (mem_*).
+func (r *ToolRegistry) WithCompatEngram(compat bool) *ToolRegistry {
+	r.compatEngram = compat
+	if compat {
+		r.registerCompatEngramTools()
+	}
+	return r
+}
+
+func (r *ToolRegistry) registerCompatEngramTools() {
+	for _, t := range r.tools {
+		if t.Name == "mem_save" {
+			return
+		}
+	}
+	compat := []Tool{
+		{Name: "mem_save", Description: "Save an episodic observation memory (Engram compatibility alias)", InputSchema: schemaObj(map[string]interface{}{
+			"content":   map[string]interface{}{"type": "string", "description": "Observation content (required)"},
+			"title":     map[string]interface{}{"type": "string", "description": "Short title (optional)"},
+			"type":      map[string]interface{}{"type": "string", "description": "Observation type: decision|architecture|workflow|bugfix|discovery|pattern|config|feedback"},
+			"project":   map[string]interface{}{"type": "string", "description": "Project name (optional)"},
+			"topic_key": map[string]interface{}{"type": "string", "description": "Topic key (optional)"},
+			"topic":     map[string]interface{}{"type": "string", "description": "Alias for topic_key"},
+			"scope":     map[string]interface{}{"type": "string", "description": "Scope: project|global|session"},
+			"tags":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+		})},
+		{Name: "mem_search", Description: "Search observation memories (Engram compatibility alias)", InputSchema: schemaObj(map[string]interface{}{
+			"query":     map[string]interface{}{"type": "string", "description": "Search query"},
+			"project":   map[string]interface{}{"type": "string", "description": "Filter by project"},
+			"topic_key": map[string]interface{}{"type": "string", "description": "Filter by topic key"},
+			"topic":     map[string]interface{}{"type": "string", "description": "Alias for topic_key"},
+			"type":      map[string]interface{}{"type": "string", "description": "Filter by type"},
+			"limit":     map[string]interface{}{"type": "number", "description": "Max results (default 20)"},
+		})},
+		{Name: "mem_get_observation", Description: "Get observation memory content by ID (Engram compatibility alias)", InputSchema: schemaObj(map[string]interface{}{
+			"observation_id": map[string]interface{}{"type": "string", "description": "Observation memory ID"},
+			"id":             map[string]interface{}{"type": "string", "description": "Alias for observation_id"},
+		})},
+		{Name: "mem_timeline", Description: "Get chronological timeline around observation (Engram compatibility alias)", InputSchema: schemaObj(map[string]interface{}{
+			"observation_id": map[string]interface{}{"type": "string", "description": "Observation memory ID"},
+			"id":             map[string]interface{}{"type": "string", "description": "Alias for observation_id"},
+			"before":         map[string]interface{}{"type": "number", "description": "Preceding count (default 3)"},
+			"after":          map[string]interface{}{"type": "number", "description": "Succeeding count (default 3)"},
+			"project":        map[string]interface{}{"type": "string", "description": "Project scope"},
+		})},
+		{Name: "mem_context", Description: "Get project context pack (Engram compatibility alias)", InputSchema: schemaObj(map[string]interface{}{
+			"project": map[string]interface{}{"type": "string", "description": "Project name (required)"},
+		})},
+	}
+	r.tools = append(r.tools, compat...)
 }
 
 // NewServiceToolRegistry creates a registry backed by app services.
@@ -290,6 +350,38 @@ func (r *ToolRegistry) registerV2Tools() {
 		{Name: "list_instructions", Description: "List all stored instruction recipes, optionally filtered by project", InputSchema: schemaObj(map[string]interface{}{
 			"project": map[string]interface{}{"type": "string", "description": "Filter by project (optional)"},
 		})},
+		{Name: "vault_mem_save", Description: "Save an episodic observation memory with deduplication and topic indexing", InputSchema: schemaObj(map[string]interface{}{
+			"content":   map[string]interface{}{"type": "string", "description": "Memory content or observation (required)"},
+			"title":     map[string]interface{}{"type": "string", "description": "Short title (optional, auto-generated from content if empty)"},
+			"type":      map[string]interface{}{"type": "string", "description": "Memory type: decision|architecture|workflow|bugfix|discovery|pattern|config|feedback"},
+			"project":   map[string]interface{}{"type": "string", "description": "Project name or ID (optional)"},
+			"topic_key": map[string]interface{}{"type": "string", "description": "Topic key for memory organization e.g. odd/tasks/feature (optional)"},
+			"topic":     map[string]interface{}{"type": "string", "description": "Alias for topic_key"},
+			"scope":     map[string]interface{}{"type": "string", "description": "Scope: project|global|session (optional)"},
+			"tags":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Additional custom tags"},
+		})},
+		{Name: "vault_mem_search", Description: "Search observation memories with preview truncation and filters", InputSchema: schemaObj(map[string]interface{}{
+			"query":     map[string]interface{}{"type": "string", "description": "Search query"},
+			"project":   map[string]interface{}{"type": "string", "description": "Filter by project name or ID"},
+			"topic_key": map[string]interface{}{"type": "string", "description": "Filter by topic key"},
+			"topic":     map[string]interface{}{"type": "string", "description": "Alias for topic_key"},
+			"type":      map[string]interface{}{"type": "string", "description": "Filter by memory type"},
+			"limit":     map[string]interface{}{"type": "number", "description": "Max results (default 20, max 100)"},
+		})},
+		{Name: "vault_mem_get", Description: "Get complete content and metadata of an observation memory by ID", InputSchema: schemaObj(map[string]interface{}{
+			"id":             map[string]interface{}{"type": "string", "description": "Observation memory ID"},
+			"observation_id": map[string]interface{}{"type": "string", "description": "Alias for id"},
+		})},
+		{Name: "vault_mem_timeline", Description: "Retrieve chronological context before and after a memory observation", InputSchema: schemaObj(map[string]interface{}{
+			"id":             map[string]interface{}{"type": "string", "description": "Target observation memory ID"},
+			"observation_id": map[string]interface{}{"type": "string", "description": "Alias for id"},
+			"before":         map[string]interface{}{"type": "number", "description": "Number of earlier observations to include (default 3)"},
+			"after":          map[string]interface{}{"type": "number", "description": "Number of later observations to include (default 3)"},
+			"project":        map[string]interface{}{"type": "string", "description": "Project scope (optional)"},
+		})},
+		{Name: "vault_mem_context", Description: "Build a compact agent-ready memory context pack for a project", InputSchema: schemaObj(map[string]interface{}{
+			"project": map[string]interface{}{"type": "string", "description": "Project name or ID (required)"},
+		})},
 	}
 }
 
@@ -300,7 +392,7 @@ func (r *ToolRegistry) List() []Tool {
 
 // Call dispatches a tool call to the handler or service dispatch.
 func (r *ToolRegistry) Call(ctx context.Context, name string, args map[string]interface{}) (*ToolCallResult, error) {
-	if r.entrySvc != nil {
+	if r.entrySvc != nil || r.vaultMemSvc != nil {
 		return r.dispatch(ctx, name, args)
 	}
 	if r.handler == nil {
@@ -379,6 +471,16 @@ func (r *ToolRegistry) dispatch(ctx context.Context, name string, args map[strin
 		return r.handleSearchInstructions(ctx, args)
 	case "list_instructions":
 		return r.handleListInstructions(ctx, args)
+	case "vault_mem_save", "mem_save":
+		return r.handleVaultMemSave(ctx, args)
+	case "vault_mem_search", "mem_search":
+		return r.handleVaultMemSearch(ctx, args)
+	case "vault_mem_get", "mem_get_observation":
+		return r.handleVaultMemGet(ctx, args)
+	case "vault_mem_timeline", "mem_timeline":
+		return r.handleVaultMemTimeline(ctx, args)
+	case "vault_mem_context", "mem_context":
+		return r.handleVaultMemContext(ctx, args)
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
@@ -1681,6 +1783,115 @@ func (r *ToolRegistry) handleListInstructions(ctx context.Context, args map[stri
 		"count":        len(out),
 		"instructions": out,
 	}), nil
+}
+
+func (r *ToolRegistry) handleVaultMemSave(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.vaultMemSvc == nil {
+		return errResult("Error: vault memory service not available"), nil
+	}
+	topic := strArg(args, "topic_key")
+	if topic == "" {
+		topic = strArg(args, "topic")
+	}
+	input := app.VaultMemSaveInput{
+		Title:    strArg(args, "title"),
+		Content:  strArg(args, "content"),
+		Type:     strArg(args, "type"),
+		Project:  strArg(args, "project"),
+		TopicKey: topic,
+		Topic:    topic,
+		Scope:    strArg(args, "scope"),
+		Tags:     parseStrings(args["tags"]),
+	}
+	res, err := r.vaultMemSvc.Save(ctx, input)
+	if err != nil {
+		return errResult("Error: " + err.Error()), nil
+	}
+	return jsonResult(res), nil
+}
+
+func (r *ToolRegistry) handleVaultMemSearch(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.vaultMemSvc == nil {
+		return errResult("Error: vault memory service not available"), nil
+	}
+	topic := strArg(args, "topic_key")
+	if topic == "" {
+		topic = strArg(args, "topic")
+	}
+	query := strArg(args, "query")
+	project := strArg(args, "project")
+	typ := strArg(args, "type")
+	limit := intArg(args, "limit")
+
+	res, err := r.vaultMemSvc.Search(ctx, query, project, topic, typ, limit)
+	if err != nil {
+		return errResult("Error: " + err.Error()), nil
+	}
+	if res == nil {
+		res = []app.VaultMemSearchResult{}
+	}
+	return jsonResult(res), nil
+}
+
+func (r *ToolRegistry) handleVaultMemGet(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.vaultMemSvc == nil {
+		return errResult("Error: vault memory service not available"), nil
+	}
+	id := strArg(args, "id")
+	if id == "" {
+		id = strArg(args, "observation_id")
+	}
+	if id == "" {
+		return errResult("Error: id or observation_id is required"), nil
+	}
+	res, err := r.vaultMemSvc.Get(ctx, id)
+	if err != nil {
+		return errResult("Error: " + err.Error()), nil
+	}
+	return jsonResult(res), nil
+}
+
+func (r *ToolRegistry) handleVaultMemTimeline(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.vaultMemSvc == nil {
+		return errResult("Error: vault memory service not available"), nil
+	}
+	id := strArg(args, "id")
+	if id == "" {
+		id = strArg(args, "observation_id")
+	}
+	if id == "" {
+		return errResult("Error: id or observation_id is required"), nil
+	}
+	before := intArg(args, "before")
+	after := intArg(args, "after")
+	project := strArg(args, "project")
+
+	var res *app.VaultMemTimelineResult
+	var err error
+	if project != "" {
+		res, err = r.vaultMemSvc.TimelineWithProject(ctx, id, before, after, project)
+	} else {
+		res, err = r.vaultMemSvc.Timeline(ctx, id, before, after)
+	}
+	if err != nil {
+		return errResult("Error: " + err.Error()), nil
+	}
+	return jsonResult(res), nil
+}
+
+func (r *ToolRegistry) handleVaultMemContext(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	if r.vaultMemSvc == nil {
+		return errResult("Error: vault memory service not available"), nil
+	}
+	project := strArg(args, "project")
+	if project == "" {
+		return errResult("Error: project is required"), nil
+	}
+	res, err := r.vaultMemSvc.Context(ctx, project)
+	if err != nil {
+		return errResult("Error: " + err.Error()), nil
+	}
+	return textResult(res), nil
 }
 
 func errResult(text string) *ToolCallResult {
