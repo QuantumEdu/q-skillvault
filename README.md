@@ -295,7 +295,7 @@ cmd/skillvault/
 | `compare-entries` | Vector similarity between two entries | `skillvault compare-entries e1 e2` |
 | `stats` | Show vault statistics and entry counts | `skillvault stats [--workflow-runs] [--json]` |
 | `update` | Rebuild and reinstall binary from source | `skillvault update [--repo <path>] [--install-path <path>]` |
-| `secrets` | Run q-secrets (optional encrypted secret manager) | `skillvault secrets init`, `skillvault secrets add pi KEY=val` |
+| `secrets` | Run q-secrets (optional encrypted secret manager) | `skillvault secrets init`, `skillvault secrets add pi KEY` |
 
 ---
 
@@ -337,9 +337,14 @@ skillvault secrets install
 skillvault secrets init
 
 # Add secrets to a profile
-skillvault secrets add pi KEY=val GITHUB_TOKEN=ghp_...
+skillvault secrets add pi KEY
+# Or pipe a value from a secure source without placing it in argv
+secret-source | skillvault secrets add pi GITHUB_TOKEN --stdin
 
-# List profiles
+# Run with a minimal inherited environment
+skillvault secrets run pi --clean-env -- opencode
+
+# List profiles (names only)
 skillvault secrets list
 
 # Retrieve a secret
@@ -353,6 +358,10 @@ skillvault secrets version
 skillvault secrets rotate pi
 skillvault secrets export pi
 ```
+
+On Unix, `skillvault secrets` replaces the wrapper process so q-secrets receives
+signals directly and preserves the child exit status. On Windows it retains the
+subprocess wrapper.
 
 ### Binary resolution order
 
