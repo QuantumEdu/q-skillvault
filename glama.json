@@ -1,0 +1,9 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "name": "q-skillvault",
+  "description": "Local-first knowledge operating system and deterministic issue-to-PR factory for AI coding agents. Features hybrid storage (SQLite+FTS5), 7-mode token-aware context compiler, LifeOS taxonomy, and MCP stdio server.",
+  "repository": "https://github.com/QuantumEdu/q-skillvault",
+  "maintainers": [
+    "QuantumEdu"
+  ]
+}

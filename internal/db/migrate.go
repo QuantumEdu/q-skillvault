@@ -5,6 +5,8 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -103,6 +105,15 @@ func RunMigrations(db *sql.DB) error {
 // OpenDB opens a SQLite database at the given path.
 // Use ":memory:" for an in-memory database.
 func OpenDB(dbPath string) (*sql.DB, error) {
+	if dbPath != ":memory:" {
+		dir := filepath.Dir(dbPath)
+		if dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create database directory: %w", err)
+			}
+		}
+	}
+
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)

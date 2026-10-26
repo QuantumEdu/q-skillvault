@@ -57,6 +57,9 @@ func (s *Services) ContextService() *app.ContextService { return s.contextSvc }
 func (s *Services) VaultMemService() *app.VaultMemService { return s.vaultMemSvc }
 
 func vaultDir() string {
+	if dir := os.Getenv("SKILLVAULT_HOME"); dir != "" {
+		return dir
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(".", ".skillvault")
