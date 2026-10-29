@@ -36,6 +36,25 @@ func ParseCommand(args []string) (string, error) {
 		return sub, nil
 	case "sync-engram", "memory-index", "memory-reindex", "memory-list-external", "entry-ref", "sync-push", "sync-pull":
 		return sub, nil
+	case "mem":
+		if len(args) < 3 {
+			return "", fmt.Errorf("mem requires a subcommand (save, search, get, timeline, context)")
+		}
+		sub2 := args[2]
+		switch sub2 {
+		case "save", "add", "record":
+			return "mem-save", nil
+		case "search", "find":
+			return "mem-search", nil
+		case "get", "show", "read":
+			return "mem-get", nil
+		case "timeline":
+			return "mem-timeline", nil
+		case "context":
+			return "mem-context", nil
+		default:
+			return "", fmt.Errorf("unknown mem subcommand: %s (use save, search, get, timeline, context)", sub2)
+		}
 	case "pending":
 		if len(args) < 3 {
 			return "", fmt.Errorf("pending requires a subcommand (add, list, review, show, done)")

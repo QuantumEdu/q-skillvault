@@ -223,13 +223,35 @@ func (s *sqliteEntryStore) Get(ctx context.Context, id string, includeArchived b
 	return result, nil
 }
 
+func sanitizeFTS5Query(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "\"") && strings.HasSuffix(raw, "\"") && len(raw) > 1 {
+		return raw
+	}
+	tokens := strings.Fields(raw)
+	var sanitized []string
+	for _, tok := range tokens {
+		upper := strings.ToUpper(tok)
+		if upper == "AND" || upper == "OR" || upper == "NOT" {
+			sanitized = append(sanitized, upper)
+			continue
+		}
+		clean := strings.ReplaceAll(tok, "\"", "\"\"")
+		sanitized = append(sanitized, `"`+clean+`"`)
+	}
+	return strings.Join(sanitized, " ")
+}
+
 func (s *sqliteEntryStore) Search(ctx context.Context, q domain.SearchQuery) ([]domain.EntrySearchResult, error) {
 	var conditions []string
 	var args []interface{}
 
 	if q.Query != "" {
 		conditions = append(conditions, "e_fts.entries_fts MATCH ?")
-		args = append(args, q.Query)
+		args = append(args, sanitizeFTS5Query(q.Query))
 	}
 
 	query := `SELECT e.id, e.title, e.slug, e.type, e.purpose, e.project_id, e.summary, e.body_optional, e.status, e.artifact_id, COALESCE(e.external_ref,''), COALESCE(e.created_at, ''), COALESCE(e.updated_at, '')
