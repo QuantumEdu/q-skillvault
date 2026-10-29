@@ -580,6 +580,77 @@ Relation types: `references`, `supersedes`, `related_to`, `part_of`, `derived_fr
 
 ---
 
+## `mem save` / `mem search` / `mem get` / `mem timeline` / `mem context`
+
+Manage episodic memories and project observations directly from the CLI with FTS5 search and SHA-256 deduplication.
+
+### `mem save`
+Save an observation. Supports title and content as flags, positional text, or standard input pipe (`stdin`).
+
+```bash
+# Via flags
+skillvault mem save --title "Chose SQLite WAL" --content "Enables concurrent readers." --type decision --project myapp --topic architecture/db
+
+# Via positional arguments
+skillvault mem save "Chose SQLite WAL" "Enables concurrent readers." --type decision --project myapp
+
+# Via stdin pipe
+echo "Discovered that FTS5 interprets unquoted hyphens as operators." | skillvault mem save "FTS5 query caveat" --type discovery --project myapp
+```
+
+| Flag / Arg | Required | Description |
+|------------|----------|-------------|
+| `<title>` or `--title` | ✅ | Short descriptive title of the observation |
+| `<content>` or `--content` / stdin | ✅ | Detailed observation body |
+| `--type` | ❌ | Observation type: `decision`, `architecture`, `bugfix`, `pattern`, `discovery`, `config`, `workflow`, `prompt` (default: `decision`) |
+| `--project` | ❌ | Project slug or name |
+| `--topic` | ❌ | Topic key (e.g. `architecture/db`) for grouping |
+
+### `mem search`
+Search observations using SQLite FTS5 (queries with hyphens or symbols are automatically sanitized).
+
+```bash
+skillvault mem search "SQLite WAL" --project myapp --limit 10
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `<query>` | ✅ | Search query string (positional) |
+| `--project` | ❌ | Filter by project |
+| `--topic` | ❌ | Filter by topic key |
+| `--type` | ❌ | Filter by observation type |
+| `--limit` | ❌ | Maximum results (default: 20) |
+
+### `mem get`
+Retrieve complete, unformatted observation details by ID or slug.
+
+```bash
+skillvault mem get obs-a1b2c3d4e5f6
+```
+
+### `mem timeline`
+Retrieve surrounding chronological observations around a target observation ID to reconstruct execution context.
+
+```bash
+skillvault mem timeline obs-a1b2c3d4e5f6 --before 3 --after 3 --project myapp
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `<id>` | ✅ | Target observation ID (positional) |
+| `--before` | ❌ | Number of preceding observations (default: 2) |
+| `--after` | ❌ | Number of subsequent observations (default: 2) |
+| `--project` | ❌ | Filter timeline by project |
+
+### `mem context`
+Compile an agent-ready markdown context pack of recent active memories for prompt injection.
+
+```bash
+skillvault mem context --project myapp
+```
+
+---
+
 ## `memory index` / `memory reindex` / `memory list-external`
 
 Index pi-memory (.md) files as shadow entries in the vault.

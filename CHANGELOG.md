@@ -4,13 +4,37 @@ All notable changes to SkillVault Qu@ntum are documented here.
 
 ## Unreleased
 
+## v3.5.0 — Episodic Memory CLI Suite, Glama Cloud Deployment & FTS5 Sanitization
+
+**2026-10-29**
+
 ### Added
 
-- **`line` factory sibling** (`cmd/line`, `internal/line`): deterministic issue jobs with SQLite (`~/.line/line.db`).
-  - Phases: plan → build → review → wait_ci → ready, with repair on CI failure (budget 3).
-  - `wait_ci` polls `gh pr checks` once per `line next` (pending stays parked).
-  - Optional ntfy on `needs_human` / `blocked` / `ready` (`--ntfy-topic` or `LINE_NTFY_TOPIC`).
-  - Loopback UI: `line serve` on `127.0.0.1:7340` (`docs/line.md`).
+- **Sovereign Episodic Memory CLI (`skillvault mem`)**:
+  - `skillvault mem save`: Save typed observations (`decision`, `architecture`, `bugfix`, `pattern`, `discovery`, etc.) with normalized SHA-256 deduplication. Supports positional text, `--content` flag, and piped `stdin`.
+  - `skillvault mem search`: Search project memories with FTS5, preview truncation (300 chars), and filtering by `--project`, `--topic`, `--type`, and `--limit`.
+  - `skillvault mem get`: Retrieve full unformatted memory observation details by ID or slug.
+  - `skillvault mem timeline`: Retrieve surrounding chronological observations (`--before`, `--after`) around an observation ID.
+  - `skillvault mem context`: Compile a ready-to-inject markdown context pack of active memories for AI agents.
+- **Glama Cloud Deployment & Container Bootstrapping**:
+  - Added production [`Dockerfile`](file:///home/informatica/dev/kbs/Dockerfile), [`.dockerignore`](file:///home/informatica/dev/kbs/.dockerignore), and [`glama.json`](file:///home/informatica/dev/kbs/glama.json) for 1-click MCP cloud hosting.
+  - Added container-safe directory creation in `internal/db/migrate.go` (`os.MkdirAll`) ensuring SQLite WAL initializes reliably in ephemeral filesystems without pre-existing `~/.skillvault` folders.
+  - Added `SKILLVAULT_HOME` environment override support in `internal/cli/deps.go`.
+- **`line` Factory Sibling** (`cmd/line`, `internal/line`):
+  - Deterministic issue-to-PR jobs with SQLite (`~/.line/line.db`).
+  - Phases: `plan` → `build` → `review` → `wait_ci` → `ready`, with automatic repair on CI failure (budget 3).
+  - Optional ntfy notifications on `needs_human`, `blocked`, or `ready`.
+  - Local web dashboard: `line serve` on `127.0.0.1:7340` ([`docs/line.md`](file:///home/informatica/dev/kbs/docs/line.md)).
+- **Submodule Hardening**:
+  - Synchronized `q-secrets` submodule to `origin/master` (`aaaa939`) with process signal preservation and security hardening.
+
+### Fixed
+
+- **FTS5 Query Sanitization**:
+  - Sanitized query tokens in `internal/db/entries_store.go` via `sanitizeFTS5Query`.
+  - Escapes hyphenated and special-character tokens in quotes (e.g. `q-agent` → `"q-agent"`), eliminating SQLite syntax errors (`SQL logic error: no such column: ...`).
+- **CLI Flag Parsing with Positional Arguments**:
+  - Implemented `reorderArgs()` in CLI handlers ensuring flags like `--project` or `--type` are cleanly parsed regardless of whether positional arguments precede them.
 
 ## v3.4.0 — Episodic Memory Suite (vault_mem_*) & Engram Compatibility Mode
 

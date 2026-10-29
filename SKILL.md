@@ -99,6 +99,13 @@ skillvault-sync status              # Estado y diferencias local vs GitHub (skil
 skillvault-sync sync                # Sincronización completa (Pull + Merge LWW + Apply + Push)
 skillvault-sync snapshot            # Snapshot atómico (VACUUM INTO) y subida a GitHub
 skillvault-sync pull                # Descargar últimos commits remotos
+
+# Memoria episódica soberana para agentes (Sovereign Episodic Memory)
+skillvault mem save "Decisión Técnica" --content "Usar SQLite WAL para lecturas concurrentes" --type decision --project myapp --topic architecture/db
+skillvault mem search "SQLite WAL" --project myapp
+skillvault mem get obs-a1b2c3d4e5f6
+skillvault mem timeline obs-a1b2c3d4e5f6 --before 2 --after 2 --project myapp
+skillvault mem context --project myapp
 ```
 
 ### 2. Fábrica Determinista Issue-to-PR (`line`)
@@ -178,4 +185,4 @@ Para exponer el conocimiento del vault a agentes (Claude Code, OpenCode, Cursor,
    - Si surge un issue de GitHub, delegarlo a `line run <issue-url>` y monitorearlo con `line tui`.
    - En caso de preguntas agénticas (`needs_human`), responder desde el TUI con `[c]` o con `line continue --answer "..."`.
 3. **Al cerrar sesión**:
-   - Ejecutar `q:session-wrap` para sintetizar el progreso en Engram y catalogar notas clave en SkillVault.
+   - Ejecutar `q:session-wrap` para sintetizar el progreso en SkillVault (`skillvault mem save` / `vault_mem_save`) y respaldar con `skillvault-sync`.

@@ -286,6 +286,7 @@ cmd/skillvault/
 | `entry ref add/list/remove` | Manage graph edges | `skillvault entry ref add e1 e2 depends_on` |
 | `entry history` | Show version history for an entry | `skillvault entry history clean-architecture-review` |
 | `entry restore` | Restore an entry to a previous version | `skillvault entry restore clean-architecture-review --version 2` |
+| `mem save/search/get/timeline/context` | Sovereign episodic memory CLI with FTS5 and deduplication | `skillvault mem save "Decision" --content "..." --project myapp` |
 | `memory index/reindex/list-external` | Index pi-memory.md files | `skillvault memory index --path ~/memory --project myapp` |
 | `backup` | Write a dated backup under `~/.skillvault/exports/` | `skillvault backup` |
 | `skillvault-sync` | Two-way bidirectional sync & merge with GitHub backup repo | `skillvault-sync status`, `skillvault-sync sync` |
@@ -478,6 +479,30 @@ skillvault mcp --compat-engram
 ```
 
 Or set the environment variable `SKILLVAULT_COMPAT_ENGRAM=1`.
+
+### Sovereign Episodic Memory CLI (`skillvault mem`)
+
+Manage episodic project memories, architectural decisions, and agent context directly from the terminal without requiring an external MCP server:
+
+```bash
+# Save an observation with automatic normalized hash deduplication
+skillvault mem save "Chose SQLite WAL" --content "Enables concurrent readers without blocking writes." --type decision --project myapp --topic architecture/db
+
+# Save from piped stdin or positional text
+echo "Learned that Go flag.FlagSet stops on the first positional arg." | skillvault mem save "Go flag parsing caveat" --type discovery --project myapp
+
+# Search observations using FTS5 (sanitized against hyphens and operators)
+skillvault mem search "SQLite WAL" --project myapp
+
+# Retrieve full observation details by ID
+skillvault mem get obs-1234567890ab
+
+# View chronological context surrounding an observation
+skillvault mem timeline obs-1234567890ab --before 2 --after 2
+
+# Compile an agent-ready context pack of recent active memories
+skillvault mem context --project myapp
+```
 
 ### MCP Setup (Claude Code / OpenCode / Antigravity)
 

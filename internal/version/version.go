@@ -7,7 +7,7 @@
 package version
 
 // Number is the semantic version MAJOR.MINOR.PATCH.
-const Number = "3.4.0"
+const Number = "3.5.0"
 
 // Display returns the user-facing form with the leading v.
 func Display() string { return "v" + Number }
