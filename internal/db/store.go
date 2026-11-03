@@ -14,6 +14,13 @@ type EntryStore interface {
 	SearchByTags(ctx context.Context, tags []string, matchAll bool, typePtr, projectPtr *string, limit int) ([]domain.EntrySearchResult, error)
 	Archive(ctx context.Context, id string) error
 	List(ctx context.Context, filter domain.EntryFilter) ([]domain.EntryListResult, error)
+
+	// Memory write-path mechanics: dedupe, supersession and lifecycle hints.
+	SetMemoryHints(ctx context.Context, id string, hints MemoryHints) error
+	FindByHash(ctx context.Context, projectID *string, hash string) (string, bool, error)
+	FindByTopic(ctx context.Context, projectID *string, topicKey, title string) (string, bool, error)
+	Supersede(ctx context.Context, olderID, newerID string) (int, error)
+	BumpDuplicate(ctx context.Context, id string) error
 }
 
 type ArtifactStore interface {

@@ -279,14 +279,19 @@ func TestMigrationIsIdempotent(t *testing.T) {
 		t.Fatalf("second RunMigrations should be idempotent but failed: %v", err)
 	}
 
-	// Should still have exactly one migration record
-	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
+	// One record per migration: re-running must not duplicate rows. Asserting the
+	// invariant instead of a magic number, so adding a migration does not require
+	// editing this test.
+	var count, distinct int
+	err = db.QueryRow("SELECT COUNT(*), COUNT(DISTINCT version) FROM schema_migrations").Scan(&count, &distinct)
 	if err != nil {
 		t.Fatalf("failed to count migrations: %v", err)
 	}
-	if count != 12 {
-		t.Errorf("expected 12 migration records (v1..v12), got %d", count)
+	if count != distinct {
+		t.Errorf("expected one record per migration, got %d rows for %d versions", count, distinct)
+	}
+	if count < 12 {
+		t.Errorf("expected at least the 12 baseline migrations, got %d", count)
 	}
 }
 

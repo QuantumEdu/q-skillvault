@@ -258,7 +258,7 @@ func (s *sqliteEntryStore) Search(ctx context.Context, q domain.SearchQuery) ([]
 		FROM entries_fts e_fts
 		JOIN entries e ON e.id = e_fts.id`
 
-	if len(conditions) > 0 || !q.IncludeArchived || q.ProjectID != nil || q.Type != nil {
+	if len(conditions) > 0 || !q.IncludeArchived || !q.IncludeSuperseded || q.ProjectID != nil || q.Type != nil {
 		if len(conditions) > 0 {
 			query += " WHERE " + conditions[0]
 			for _, c := range conditions[1:] {
@@ -270,6 +270,9 @@ func (s *sqliteEntryStore) Search(ctx context.Context, q domain.SearchQuery) ([]
 
 		if !q.IncludeArchived {
 			query += " AND e.status != 'archived'"
+		}
+		if !q.IncludeSuperseded {
+			query += " AND e.superseded_by IS NULL"
 		}
 		if q.ProjectID != nil {
 			query += " AND e.project_id = ?"
@@ -495,6 +498,9 @@ func (s *sqliteEntryStore) List(ctx context.Context, filter domain.EntryFilter) 
 
 	if !filter.IncludeArchived {
 		query += " AND e.status != 'archived'"
+	}
+	if !filter.IncludeSuperseded {
+		query += " AND e.superseded_by IS NULL"
 	}
 	if filter.ProjectID != nil {
 		query += " AND e.project_id = ?"

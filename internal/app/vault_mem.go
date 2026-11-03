@@ -24,6 +24,12 @@ type VaultMemSaveInput struct {
 	Topic    string   `json:"topic,omitempty"` // alias for TopicKey
 	Scope    string   `json:"scope"`     // project, global, session
 	Tags     []string `json:"tags"`      // additional custom tags
+
+	// Lifecycle hints. review_after marks when the fact should be re-checked,
+	// expires_at when it stops being true, pinned protects it from review.
+	Pinned      bool   `json:"pinned,omitempty"`
+	ReviewAfter string `json:"review_after,omitempty"`
+	ExpiresAt   string `json:"expires_at,omitempty"`
 }
 
 // VaultMemSaveResult summarizes the save or deduplication outcome.
@@ -200,26 +206,13 @@ func (s *EntryService) SaveVaultMem(ctx context.Context, input VaultMemSaveInput
 		}
 	}
 
-	// Check if active entry with external_ref already exists in the given project
-	existingList, err := s.store.List(ctx, domain.EntryFilter{
-		ProjectID:       projectID,
-		IncludeArchived: false,
-	})
-	if err == nil {
-		for _, item := range existingList {
-			if projName == "" && item.Entry.ProjectID != nil {
-				continue
-			}
-			if item.Entry.ExternalRef == externalRef {
-				fullRes, getErr := s.store.Get(ctx, item.Entry.ID, false)
-				if getErr == nil {
-					return &fullRes, true, nil
-				}
-				return &domain.EntryResult{
-					Entry: item.Entry,
-					Tags:  item.Tags,
-				}, true, nil
-			}
+	// Dedupe on an indexed hash instead of scanning every entry in the project.
+	// The previous implementation listed the whole project on every save.
+	if existingID, found, findErr := s.store.FindByHash(ctx, projectID, hash); findErr == nil && found {
+		fullRes, getErr := s.store.Get(ctx, existingID, false)
+		if getErr == nil {
+			_ = s.store.BumpDuplicate(ctx, existingID)
+			return &fullRes, true, nil
 		}
 	}
 
@@ -278,6 +271,28 @@ func (s *EntryService) SaveVaultMem(ctx context.Context, input VaultMemSaveInput
 	entryRes, err := s.SaveEntry(ctx, saveInput)
 	if err != nil {
 		return nil, false, fmt.Errorf("save vault mem: %w", err)
+	}
+
+	// A topic that evolves replaces its previous revision instead of piling up.
+	// Looked up BEFORE the hints are written, otherwise the new entry matches
+	// itself and supersedes nothing.
+	if topicKey != "" {
+		if olderID, found, findErr := s.store.FindByTopic(ctx, projectID, topicKey, title); findErr == nil &&
+			found && olderID != entryRes.Entry.Entry.ID {
+			_, _ = s.store.Supersede(ctx, olderID, entryRes.Entry.Entry.ID)
+		}
+	}
+
+	// Record the mechanics next to the entry: the hash the next save dedupes
+	// against, the topic a newer save supersedes, and the lifecycle hints.
+	if err := s.store.SetMemoryHints(ctx, entryRes.Entry.Entry.ID, db.MemoryHints{
+		NormalizedHash: hash,
+		TopicKey:       topicKey,
+		Pinned:         input.Pinned,
+		ReviewAfter:    input.ReviewAfter,
+		ExpiresAt:      input.ExpiresAt,
+	}); err != nil {
+		return nil, false, err
 	}
 
 	return &entryRes.Entry, false, nil

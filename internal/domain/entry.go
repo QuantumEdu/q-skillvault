@@ -98,6 +98,9 @@ type EntryFilter struct {
 	Type            *string
 	Tags            []string
 	IncludeArchived bool
+	// IncludeSuperseded returns revisions replaced by a newer memory. Off by
+	// default, so a listing shows the current truth, not its history.
+	IncludeSuperseded bool
 }
 
 type EntryResult struct {

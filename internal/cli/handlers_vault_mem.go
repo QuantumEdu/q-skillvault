@@ -17,14 +17,17 @@ import (
 // ──────────────────────────────────────────────────────────────────────────────
 
 type memSaveFlags struct {
-	Content  string
-	Title    string
-	Type     string
-	Project  string
-	TopicKey string
-	Scope    string
-	Tags     string
-	JSON     bool
+	Content     string
+	Title       string
+	Type        string
+	Project     string
+	TopicKey    string
+	Scope       string
+	Tags        string
+	Pinned      bool
+	ReviewAfter string
+	ExpiresAt   string
+	JSON        bool
 }
 
 func reorderArgs(raw []string) []string {
@@ -58,6 +61,9 @@ func parseMemSaveFlags(args []string) (memSaveFlags, error) {
 	fs.StringVar(&f.TopicKey, "topic", "", "Alias for topic-key")
 	fs.StringVar(&f.Scope, "scope", "project", "Scope: project|global|session")
 	fs.StringVar(&f.Tags, "tags", "", "Comma-separated tags")
+	fs.BoolVar(&f.Pinned, "pinned", false, "Protect this observation from review")
+	fs.StringVar(&f.ReviewAfter, "review-after", "", "Date after which this fact should be re-checked (YYYY-MM-DD)")
+	fs.StringVar(&f.ExpiresAt, "expires-at", "", "Date after which this fact stops being true (YYYY-MM-DD)")
 	fs.BoolVar(&f.JSON, "json", false, "Output in JSON format")
 
 	if len(args) > 3 {
@@ -99,13 +105,16 @@ func runMemSave(ctx context.Context, svc *Services, args []string) {
 	}
 
 	res, err := svc.vaultMemSvc.Save(ctx, app.VaultMemSaveInput{
-		Title:    flags.Title,
-		Content:  flags.Content,
-		Type:     flags.Type,
-		Project:  flags.Project,
-		TopicKey: flags.TopicKey,
-		Scope:    flags.Scope,
-		Tags:     tags,
+		Title:       flags.Title,
+		Content:     flags.Content,
+		Type:        flags.Type,
+		Project:     flags.Project,
+		TopicKey:    flags.TopicKey,
+		Scope:       flags.Scope,
+		Tags:        tags,
+		Pinned:      flags.Pinned,
+		ReviewAfter: flags.ReviewAfter,
+		ExpiresAt:   flags.ExpiresAt,
 	})
 	if err != nil {
 		PrintError(err)
