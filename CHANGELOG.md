@@ -4,6 +4,45 @@ All notable changes to SkillVault Qu@ntum are documented here.
 
 ## Unreleased
 
+## v3.5.1 — FTS5 Index Integrity: Repair the Repair That Never Repaired
+
+**2026-11-03**
+
+### Fixed
+
+- **Full-text index drift (`internal/db/fts.go`, `internal/db/search_index.go`)**:
+  `RebuildFTS` used the FTS5 `rebuild` command against `entries_fts`, a regular
+  (content-owning) FTS5 table where that command is a silent no-op: it returns
+  success and changes nothing. It also had no callers anywhere in the codebase, so
+  no code path could ever repair a drifted index.
+  Measured on a real 432-entry vault: 24 rows indexed (5.6% coverage), leaving 408
+  memories unreachable by `skillvault find` with no error reported by any command.
+  The rebuild now clears the index and re-inserts every row from `entries` inside a
+  single transaction.
+- **Self-healing reconciliation on open (`internal/cli/deps.go`)**:
+  `openVault` now calls `Store.EnsureSearchIndex`, which compares the entry count
+  with the indexed count and repairs the difference, reporting
+  `search index repaired: <before> -> <after> indexed entries`. A healthy index is
+  never touched: the check costs two counts per command.
+
+### Added
+
+- `Store.SearchIndexStatus` and `Store.EnsureSearchIndex`
+  (`internal/db/search_index.go`) expose index drift as data instead of an
+  assumption nobody verifies.
+- Regression tests (`internal/db/search_index_test.go`) pin the FTS5 `rebuild`
+  no-op, so the defect cannot silently return.
+- [`docs/search-index.md`](docs/search-index.md): the invariant, how to verify it,
+  and why `rebuild` is not a repair on this schema.
+
+### Validation
+
+- `go build ./...` clean; `go test ./internal/db/` and `go test ./internal/cli/`
+  pass.
+- End-to-end on a copy of a drifted 432-entry vault:
+  `search index repaired: 18 -> 426 indexed entries`, and `find "Kiro"` went from
+  `No results found` to 11 results.
+
 ## v3.5.0 — Episodic Memory CLI Suite, Glama Cloud Deployment & FTS5 Sanitization
 
 **2026-10-29**

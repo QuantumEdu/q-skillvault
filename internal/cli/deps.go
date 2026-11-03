@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -104,6 +105,15 @@ func openVault() *Services {
 	}
 
 	store := db.NewStore(sqlDB)
+
+	// The full-text index is derived data and can drift from entries without any
+	// error surfacing: a drifted row is a memory that exists but can never be
+	// found. Reconcile it on open so the vault is never silently half-searchable.
+	if repaired, before, after, err := store.EnsureSearchIndex(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "[sk-vault] warning: search index check failed: %v\n", err)
+	} else if repaired {
+		fmt.Fprintf(os.Stderr, "[sk-vault] search index repaired: %d -> %d indexed entries\n", before, after)
+	}
 	fileSvc, err := files.NewArtifactFileService(vaultDir())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating file service: %v\n", err)
