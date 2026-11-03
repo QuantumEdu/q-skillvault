@@ -4,6 +4,64 @@ All notable changes to SkillVault Qu@ntum are documented here.
 
 ## Unreleased
 
+## v3.6.0 — Memory Write-Path Quality: Dedupe, Supersession & Lifecycle
+
+**2026-11-03**
+
+Memory stopped being a pile of entries that grows forever. Three mechanics make
+it behave like memory, each backed by an index so the write path stays O(1).
+
+### Added
+
+- **Schema (`internal/db/migrations/013_memory_quality.sql`)**: `normalized_hash`,
+  `topic_key`, `revision_count`, `duplicate_count`, `superseded_by`, `pinned`,
+  `review_after`, `expires_at` on `entries`, plus indexes on
+  `(COALESCE(project_id,''), normalized_hash)`, `(COALESCE(project_id,''), topic_key)`
+  and `superseded_by`. The backfill recovers the values from conventions the memory
+  path already writes (`external_ref = "hash:<sha256>"` and the `topic_key:<key>`
+  tag), so existing observations get the mechanics without a re-save.
+- **Supersession (`Store.Supersede`)**: a fact restated under the same
+  `topic_key` **and** `title` replaces its previous revision. The old row keeps
+  `superseded_by` set and `revision_count` increments — history stays readable,
+  current truth stays short.
+- **Dedupe on an index (`Store.FindByHash`, `Store.BumpDuplicate`)**: identical
+  content in the same project resolves to one entry through an indexed lookup
+  instead of listing every entry in the project on every save. Re-learned facts
+  increment `duplicate_count` rather than being silently absorbed.
+- **Lifecycle hints (`Store.SetMemoryHints`, `skillvault mem save --pinned
+  --review-after --expires-at`)**: when a fact should be re-checked, when it stops
+  being true, and whether review must leave it alone.
+- **`IncludeSuperseded`** on `domain.SearchQuery` and `domain.EntryFilter`: off by
+  default, so search and listing show the current truth and history is opt-in.
+
+### Fixed
+
+- **Design error caught by the existing suite**: the first supersession rule keyed
+  on `topic_key` alone. A topic groups related observations, so that rule would
+  have silently deleted unrelated memories — three distinct facts under
+  `storage/sqlite` collapsed to one. Identity is now topic **plus** title.
+- **`TestMigrationIsIdempotent`** hardcoded "exactly 12 migration records" and broke
+  on the thirteenth. It now asserts the invariant (one record per version, no
+  duplicates) instead of a magic number.
+- **Root cause of the v3.5.1 index drift, documented**: migration
+  `012_instruction_entry_type.sql` ends with the same `entries_fts ... 'rebuild'`
+  no-op that `RebuildFTS` used. The index was not degraded by accident — a
+  migration believed it was rebuilding it.
+
+### Validation
+
+- `go build ./...` clean; `go test ./...` → **21 packages ok, 0 failures**.
+- New tests: `internal/db/memory_quality_test.go` (hints, project-scoped hash,
+  supersede + search visibility, duplicate counting) and
+  `internal/app/memory_supersede_test.go` (same fact restated supersedes; different
+  facts under one topic coexist; identical content dedupes).
+
+### Not in this release
+
+Relations between memories (`entry_links` still has 0 rows) and the Engram data
+migration. Both are the next slice; supersession had to exist first, otherwise the
+migration would copy duplicates into a store that could not resolve them.
+
 ## v3.5.1 — FTS5 Index Integrity: Repair the Repair That Never Repaired
 
 **2026-11-03**

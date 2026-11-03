@@ -37,6 +37,7 @@ Store, search, and retrieve prompts, skills, workflows, decisions, project memor
 | [`docs/architecture.md`](docs/architecture.md) | Clean Architecture deep-dive, data flows, design decisions |
 | [`docs/line.md`](docs/line.md) | `line` factory sibling (plan/build/review, ntfy, loopback UI) |
 | [`docs/search-index.md`](docs/search-index.md) | Full-text index invariant, drift detection, and why FTS5 `rebuild` is not a repair |
+| [`docs/memory-quality.md`](docs/memory-quality.md) | Memory write path: dedupe, supersession, lifecycle hints and their guarantees |
 
 ---
 

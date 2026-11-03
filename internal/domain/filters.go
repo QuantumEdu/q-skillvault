@@ -8,8 +8,11 @@ type SearchQuery struct {
 	Purpose         *string
 	Tags            []string
 	IncludeArchived bool
-	Limit           int
-	Vector          bool
+	// IncludeSuperseded returns revisions replaced by a newer memory. Off by
+	// default: a superseded fact is history, not an answer.
+	IncludeSuperseded bool
+	Limit             int
+	Vector            bool
 }
 
 type VaultExport struct {
