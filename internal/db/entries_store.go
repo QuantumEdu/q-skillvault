@@ -223,6 +223,8 @@ func (s *sqliteEntryStore) Get(ctx context.Context, id string, includeArchived b
 	return result, nil
 }
 
+const maxFTS5Tokens = 32
+
 func sanitizeFTS5Query(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -232,6 +234,9 @@ func sanitizeFTS5Query(raw string) string {
 		return raw
 	}
 	tokens := strings.Fields(raw)
+	if len(tokens) > maxFTS5Tokens {
+		tokens = tokens[:maxFTS5Tokens]
+	}
 	var sanitized []string
 	for _, tok := range tokens {
 		upper := strings.ToUpper(tok)
