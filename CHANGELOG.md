@@ -4,6 +4,11 @@ All notable changes to SkillVault Qu@ntum are documented here.
 
 ## Unreleased
 
+### Added
+- **Private Block Redaction (`StripPrivateTags`)**: Automatically strips and redacts `<private>...</private>` tags into `[REDACTED]` in `SaveVaultMem` and `SyncEngram` before computing normalized hash, summary, and persistence, preventing credentials or private agent thoughts from leaking into FTS5, context bundles, or backups.
+- **Engram Sync v3.7 Parity (`SyncEngram`)**: Dynamically probes and imports Engram lifecycle fields (`pinned`, `review_after`, `expires_at`), deduplication hashes, and organization tags (`org:<name>`) via `SetMemoryHints`, preserving full quality mechanics when consolidating Engram databases into SkillVault while retaining backward compatibility with legacy schemas.
+- **Deterministic FTS5 Query Bounding**: Caps search query tokens to a deterministic maximum of 32 in `sanitizeFTS5Query` to avoid SQLite FTS5 parser depth exhaustion on large agent prompts.
+
 ## v3.6.0 — Memory Write-Path Quality: Dedupe, Supersession & Lifecycle
 
 **2026-11-03**

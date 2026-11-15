@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -101,6 +102,13 @@ func NormalizedMemoryHash(content string) string {
 	return CalculateNormalizedHash(content)
 }
 
+var privateTagRE = regexp.MustCompile(`(?is)<private>.*?</private>`)
+
+// StripPrivateTags replaces <private>...</private> blocks (case-insensitive, multiline) with [REDACTED].
+func StripPrivateTags(s string) string {
+	return privateTagRE.ReplaceAllString(s, "[REDACTED]")
+}
+
 // MapObservationType translates Engram observation categories into SkillVault domain types and tag names.
 func MapObservationType(t string) (domain.EntryType, string) {
 	clean := strings.ToLower(strings.TrimSpace(t))
@@ -181,7 +189,13 @@ func entryToSearchResult(e domain.Entry, tags []domain.Tag) VaultMemSearchResult
 // Returns (*domain.EntryResult, deduplicated, error).
 func (s *EntryService) SaveVaultMem(ctx context.Context, input VaultMemSaveInput) (*domain.EntryResult, bool, error) {
 	content := strings.TrimSpace(input.Content)
-	if content == "" && strings.TrimSpace(input.Title) == "" {
+	title := strings.TrimSpace(input.Title)
+
+	// Redact private blocks before validation, hashing, summarizing, or storing.
+	content = StripPrivateTags(content)
+	title = StripPrivateTags(title)
+
+	if content == "" && title == "" {
 		return nil, false, fmt.Errorf("content or title is required for memory observation")
 	}
 
@@ -219,7 +233,6 @@ func (s *EntryService) SaveVaultMem(ctx context.Context, input VaultMemSaveInput
 	// Not found: map types, build tags, generate summary
 	mappedType, typeTag := MapObservationType(input.Type)
 
-	title := strings.TrimSpace(input.Title)
 	if title == "" {
 		lines := strings.Split(content, "\n")
 		title = strings.TrimSpace(lines[0])

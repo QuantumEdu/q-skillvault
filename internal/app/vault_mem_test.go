@@ -432,3 +432,64 @@ func TestVaultMemServiceFacade(t *testing.T) {
 		t.Errorf("expected non-empty context string")
 	}
 }
+
+func TestStripPrivateTags(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"empty", "", ""},
+		{"no tags", "Public architecture decision", "Public architecture decision"},
+		{"single private tag", "Config with <private>supersecretkey123</private> value", "Config with [REDACTED] value"},
+		{"case insensitive", "Config with <PRIVATE>token-xyz</PRIVATE> here", "Config with [REDACTED] here"},
+		{"multiline private block", "Header\n<private>line1\nline2\nsecret</private>\nFooter", "Header\n[REDACTED]\nFooter"},
+		{"multiple tags", "<private>a</private> middle <private>b</private>", "[REDACTED] middle [REDACTED]"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := StripPrivateTags(tc.input)
+			if got != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestSaveVaultMem_StripPrivateTags(t *testing.T) {
+	entrySvc, _, cleanup := setupVaultMemTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	input := VaultMemSaveInput{
+		Title:   "Database auth <private>token-999</private>",
+		Content: "Connect to DB with secret <private>password-xyz\nsuper-secret</private> done.",
+		Type:    "config",
+		Project: "secret-test-proj",
+	}
+
+	res, _, err := entrySvc.SaveVaultMem(ctx, input)
+	if err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	if strings.Contains(res.Entry.Title, "token-999") {
+		t.Errorf("expected title to redact private tag, got %q", res.Entry.Title)
+	}
+	if !strings.Contains(res.Entry.Title, "[REDACTED]") {
+		t.Errorf("expected title to contain [REDACTED], got %q", res.Entry.Title)
+	}
+
+	if strings.Contains(res.Entry.BodyOptional, "password-xyz") {
+		t.Errorf("expected body to redact private tag, got %q", res.Entry.BodyOptional)
+	}
+	if !strings.Contains(res.Entry.BodyOptional, "[REDACTED]") {
+		t.Errorf("expected body to contain [REDACTED], got %q", res.Entry.BodyOptional)
+	}
+
+	if strings.Contains(res.Entry.Summary, "password-xyz") {
+		t.Errorf("expected summary to redact private tag, got %q", res.Entry.Summary)
+	}
+}
