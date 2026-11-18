@@ -109,5 +109,7 @@ func Run(cmd string, args []string) {
 		runMemTimeline(ctx, svc, args)
 	case "mem-context":
 		runMemContext(ctx, svc, args)
+	case "mem-promote":
+		runMemPromote(ctx, svc, args)
 	}
 }

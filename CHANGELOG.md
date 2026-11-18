@@ -2,12 +2,17 @@
 
 All notable changes to SkillVault Qu@ntum are documented here.
 
-## Unreleased
+## v3.7.0 — Episodic Promotion, Semantic Graph Relations & 8-Layer Anatomical Architecture
+
+**2026-11-18**
 
 ### Added
+- **Episodic Observation Promotion (`skillvault mem promote`)**: Promotes episodic observations (`vault_mem`) to formal canonical knowledge entries (`decision`, `skill`, etc.) with gate on duplicate frequency (`--min-duplicate-count`), provenance tagging (`promoted-from:<id>`), and history preservation.
+- **Semantic Graph Relations (`entry ref add --rel <type>`)**: Expands `entry_links` with semantic relation types (`contradicts`, `cites`, `depends_on`, `supersedes`, `part_of`), allowing rich knowledge graphs across decisions, skills, and observations.
 - **Private Block Redaction (`StripPrivateTags`)**: Automatically strips and redacts `<private>...</private>` tags into `[REDACTED]` in `SaveVaultMem` and `SyncEngram` before computing normalized hash, summary, and persistence, preventing credentials or private agent thoughts from leaking into FTS5, context bundles, or backups.
 - **Engram Sync v3.7 Parity (`SyncEngram`)**: Dynamically probes and imports Engram lifecycle fields (`pinned`, `review_after`, `expires_at`), deduplication hashes, and organization tags (`org:<name>`) via `SetMemoryHints`, preserving full quality mechanics when consolidating Engram databases into SkillVault while retaining backward compatibility with legacy schemas.
 - **Deterministic FTS5 Query Bounding**: Caps search query tokens to a deterministic maximum of 32 in `sanitizeFTS5Query` to avoid SQLite FTS5 parser depth exhaustion on large agent prompts.
+- **8-Layer Anatomical Architecture Documentation**: Fully documents the 8 functional layers of SkillVault in `SKILL.md` (root and agent packages) and `docs/architecture.md` with Mermaid diagrams, clarifying interfaces, memory, context compilation, workflows, productivity, telemetry, secrets, and hybrid storage.
 
 ## v3.6.0 — Memory Write-Path Quality: Dedupe, Supersession & Lifecycle
 

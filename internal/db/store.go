@@ -21,6 +21,7 @@ type EntryStore interface {
 	FindByTopic(ctx context.Context, projectID *string, topicKey, title string) (string, bool, error)
 	Supersede(ctx context.Context, olderID, newerID string) (int, error)
 	BumpDuplicate(ctx context.Context, id string) error
+	GetDuplicateCount(ctx context.Context, id string) (int, error)
 }
 
 type ArtifactStore interface {

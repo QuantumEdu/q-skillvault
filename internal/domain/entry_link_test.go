@@ -28,6 +28,9 @@ func TestRelationTypeValidation(t *testing.T) {
 	all := []RelationType{
 		RelationReferences, RelationSupersedes, RelationRelatedTo,
 		RelationPartOf, RelationDerivedFrom, RelationImplements,
+		RelationUses, RelationExtends, RelationHandoffOf,
+		RelationGeneratedFrom, RelationDependsOn,
+		RelationContradicts, RelationCites,
 	}
 	for _, rt := range all {
 		if !rt.IsValid() {

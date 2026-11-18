@@ -16,6 +16,8 @@ const (
 	RelationHandoffOf     RelationType = "handoff_of"
 	RelationGeneratedFrom RelationType = "generated_from"
 	RelationDependsOn     RelationType = "depends_on"
+	RelationContradicts   RelationType = "contradicts"
+	RelationCites         RelationType = "cites"
 )
 
 // CycleProne returns true if this relation type can create cycles and
@@ -33,7 +35,8 @@ func (rt RelationType) IsValid() bool {
 	case RelationReferences, RelationSupersedes, RelationRelatedTo,
 		RelationPartOf, RelationDerivedFrom, RelationImplements,
 		RelationUses, RelationExtends, RelationHandoffOf,
-		RelationGeneratedFrom, RelationDependsOn:
+		RelationGeneratedFrom, RelationDependsOn,
+		RelationContradicts, RelationCites:
 		return true
 	}
 	return false
