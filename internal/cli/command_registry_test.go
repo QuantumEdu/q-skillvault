@@ -59,6 +59,9 @@ func TestNormalizeArgs_ResolvesIntentAliases(t *testing.T) {
 		{name: "workflow import", args: []string{"skillvault", "workflow", "import", "--file", "wf.yaml"}, want: []string{"skillvault", "import-workflow", "--file", "wf.yaml"}},
 		{name: "setup doctor", args: []string{"skillvault", "setup", "doctor"}, want: []string{"skillvault", "doctor"}},
 		{name: "context project", args: []string{"skillvault", "context", "project", "--project", "codex"}, want: []string{"skillvault", "get-context", "--project", "codex"}},
+		{name: "context flag survives", args: []string{"skillvault", "context", "--project", "codex"}, want: []string{"skillvault", "get-context", "--project", "codex"}},
+		{name: "context mode flag survives", args: []string{"skillvault", "context", "--mode", "planning"}, want: []string{"skillvault", "get-context", "--mode", "planning"}},
+		{name: "open entry flag survives", args: []string{"skillvault", "open", "--entry", "entry-1"}, want: []string{"skillvault", "get", "--entry", "entry-1"}},
 		{name: "open entry", args: []string{"skillvault", "open", "entry-1"}, want: []string{"skillvault", "get", "entry-1"}},
 		{name: "todo add", args: []string{"skillvault", "todo", "add", "--project", "codex", "Update presentation"}, want: []string{"skillvault", "pending", "add", "--project", "codex", "Update presentation"}},
 		{name: "fuzzy doctor typo", args: []string{"skillvault", "docter"}, want: []string{"skillvault", "doctor"}},
@@ -105,5 +108,18 @@ func TestResolveHelpTopic(t *testing.T) {
 	commandID, showCommand, ok = ResolveHelpTopic([]string{"mcp", "config", "help"})
 	if !ok || !showCommand || commandID != "mcp-config" {
 		t.Fatalf("expected mcp config help alias, got ok=%v showCommand=%v commandID=%q", ok, showCommand, commandID)
+	}
+}
+
+// A flag token is not part of a help-topic phrase: "context --help" must
+// not match the "context help" topic (same alias/flag collision as the
+// get-context bug: normalizeCommandKey strips the dashes).
+func TestResolveHelpTopicIgnoresFlags(t *testing.T) {
+	if _, _, ok := ResolveHelpTopic([]string{"context", "--help"}); ok {
+		t.Error("expected no help topic for 'context --help'")
+	}
+	commandID, showCommand, ok := ResolveHelpTopic([]string{"context", "help"})
+	if !ok || !showCommand || commandID != "get-context" {
+		t.Fatalf("expected get-context help topic for 'context help', got ok=%v showCommand=%v commandID=%q", ok, showCommand, commandID)
 	}
 }

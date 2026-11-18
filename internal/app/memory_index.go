@@ -46,10 +46,13 @@ func (s *MemoryIndexService) Index(ctx context.Context, memDir, projectID string
 
 	// Validate project exists
 	if _, err := s.projectStore.Get(ctx, projectID); err != nil {
+		// Auto-created from the index: store the canonical slug, not the
+		// raw reference, so the project resolves by `--project <slug>`
+		// like one created with add-project.
 		proj := domain.Project{
 			ID:          projectID,
 			Name:        projectID,
-			Slug:        projectID,
+			Slug:        slugify(projectID),
 			Description: "Auto-created from pi-memory index",
 			Status:      domain.StatusActive,
 		}

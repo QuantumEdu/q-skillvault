@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/quantum-6/skillvault/internal/app"
+	"github.com/quantum-6/skillvault/internal/domain"
 )
 
 // Tests for `skillvault link-project`, the discoverability fix for the
@@ -45,16 +46,30 @@ func TestLinkProjectCreatesAgentsMD(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := string(data)
+	// The marker must name the real vault and the absolute binary path,
+	// not the hardcoded defaults (e2e pilot, REPORT.md §4).
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable failed: %v", err)
+	}
+	vaultPath := filepath.Join(os.Getenv("HOME"), ".skillvault", "vault.db")
 	for _, want := range []string{
 		"<!-- skillvault:start -->",
 		"<!-- skillvault:end -->",
 		"memory-eval",
-		"skillvault find",
+		"find \"<topic>\" --project memory-eval",
 		"--project memory-eval",
-		"skillvault context",
+		"context --project memory-eval",
+		vaultPath,
+		exe,
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("AGENTS.md missing %q:\n%s", want, content)
+		}
+	}
+	for _, notWant := range []string{"~/.skillvault/vault.db", "(binary: `skillvault`)"} {
+		if strings.Contains(content, notWant) {
+			t.Errorf("marker still uses hardcoded default %q:\n%s", notWant, content)
 		}
 	}
 	if !strings.Contains(buf.String(), "Linked project memory-eval") {
@@ -129,6 +144,46 @@ func TestLinkProjectReplacesStaleSection(t *testing.T) {
 	}
 }
 
+// A project created with a non-slugified name must link by its slug:
+// `add-project --name "Verify Paths"` stores slug "verify-paths", so
+// `link-project --project verify-paths` resolves and the marker names the
+// slugified slug (with the display name preserved).
+func TestLinkProjectResolvesSlugifiedName(t *testing.T) {
+	svc, projDir := setupLinkProjectServices(t)
+
+	proj, err := svc.projectSvc.SaveProject(context.Background(), app.SaveProjectInput{Name: "Verify Paths"})
+	if err != nil {
+		t.Fatalf("SaveProject failed: %v", err)
+	}
+	if proj.Slug != "verify-paths" {
+		t.Fatalf("expected slug verify-paths, got %q", proj.Slug)
+	}
+
+	var buf bytes.Buffer
+	if err := LinkProject(&buf, svc, "verify-paths", projDir); err != nil {
+		t.Fatalf("LinkProject by slug failed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(projDir, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		"Project: Verify Paths (slug `verify-paths`, id `" + proj.ID + "`)",
+		"--project verify-paths",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("marker missing %q:\n%s", want, content)
+		}
+	}
+
+	// The raw name is not a valid reference for the new project.
+	var buf2 bytes.Buffer
+	if err := LinkProject(&buf2, svc, "Verify Paths", projDir); err == nil {
+		t.Error("expected error linking by raw name, got nil")
+	}
+}
+
 func TestLinkProjectUnknownProject(t *testing.T) {
 	svc, projDir := setupLinkProjectServices(t)
 
@@ -145,6 +200,77 @@ func TestLinkProjectUnknownProject(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(projDir, "AGENTS.md")); !os.IsNotExist(statErr) {
 		t.Error("AGENTS.md must not be created when the project is unknown")
+	}
+}
+
+// skillvaultMarkerSection renders the given paths verbatim: the Vault line
+// and the example commands must carry the real vault and binary, never the
+// hardcoded defaults.
+func TestSkillvaultMarkerSectionUsesGivenPaths(t *testing.T) {
+	proj := &domain.Project{Name: "memory-eval", Slug: "memory-eval", ID: "proj-123"}
+	section := skillvaultMarkerSection(proj, "/tmp/vault-x/vault.db", "/opt/bin/skillvault")
+	for _, want := range []string{
+		"- Vault: `/tmp/vault-x/vault.db` (binary: `/opt/bin/skillvault`)",
+		"`/opt/bin/skillvault find \"<topic>\" --project memory-eval`",
+		"`/opt/bin/skillvault context --project memory-eval`",
+		"slug `memory-eval`, id `proj-123`",
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("marker section missing %q:\n%s", want, section)
+		}
+	}
+	if strings.Contains(section, "~/.skillvault") || strings.Contains(section, "`skillvault ") {
+		t.Errorf("marker section still uses hardcoded defaults:\n%s", section)
+	}
+}
+
+// The marker must name the vault this process actually operates on when
+// SKILLVAULT_HOME points elsewhere, and the absolute binary path — not the
+// default ~/.skillvault/vault.db and a bare `skillvault` that PATH may
+// resolve to an older install (e2e pilot, REPORT.md §4).
+func TestLinkProjectMarkerUsesSkillVaultHome(t *testing.T) {
+	home := t.TempDir()
+	vaultDir := t.TempDir()
+	origHome, origVault := os.Getenv("HOME"), os.Getenv("SKILLVAULT_HOME")
+	os.Setenv("HOME", home)
+	os.Setenv("SKILLVAULT_HOME", vaultDir)
+	t.Cleanup(func() {
+		os.Setenv("HOME", origHome)
+		os.Setenv("SKILLVAULT_HOME", origVault)
+	})
+
+	RunInit()
+	svc := OpenVault()
+	if _, err := svc.projectSvc.SaveProject(context.Background(), app.SaveProjectInput{Name: "memory-eval"}); err != nil {
+		t.Fatalf("SaveProject failed: %v", err)
+	}
+	projDir := t.TempDir()
+
+	var buf bytes.Buffer
+	if err := LinkProject(&buf, svc, "memory-eval", projDir); err != nil {
+		t.Fatalf("LinkProject failed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(projDir, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	wantVault := filepath.Join(vaultDir, "vault.db")
+	if !strings.Contains(content, wantVault) {
+		t.Errorf("marker missing real vault path %q:\n%s", wantVault, content)
+	}
+	if strings.Contains(content, "~/.skillvault/vault.db") {
+		t.Errorf("marker still uses the hardcoded default vault path:\n%s", content)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable failed: %v", err)
+	}
+	if !strings.Contains(content, exe) {
+		t.Errorf("marker missing absolute binary path %q:\n%s", exe, content)
+	}
+	if strings.Contains(content, "(binary: `skillvault`)") {
+		t.Errorf("marker still names the binary by short name:\n%s", content)
 	}
 }
 

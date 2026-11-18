@@ -73,11 +73,26 @@ func (s *ContextService) GetContext(ctx context.Context, input ContextInput) (*C
 		maxChars = 12000
 	}
 
+	// Resolve the --project reference (ID or slug) once to the canonical
+	// project ID. Every collector below filters on project_id, so passing
+	// the raw slug yields zero rows while the header (which resolves via
+	// projectStore.Get) still names the project — a pack that looks valid
+	// but carries no decisions. An unknown project errors, as in the entry
+	// reads (Fix 1, PR #108), instead of silently returning an empty pack.
+	projectID := strings.TrimSpace(input.Project)
+	if projectID != "" {
+		id, err := resolveProjectRef(ctx, s.projectStore, projectID)
+		if err != nil {
+			return nil, err
+		}
+		projectID = id
+	}
+
 	pack := &ContextPack{}
 	pack.Header = "# CONTEXT PACK\n\n## Scope\n"
 
-	if input.Project != "" {
-		proj, err := s.projectStore.Get(ctx, input.Project)
+	if projectID != "" {
+		proj, err := s.projectStore.Get(ctx, projectID)
 		if err == nil {
 			pack.Header += fmt.Sprintf("Project: %s\nMode: %s\n\n## Project State\n- %s: %s\n",
 				proj.Name, input.Mode, proj.Name, proj.Description)
@@ -124,15 +139,15 @@ func (s *ContextService) GetContext(ctx context.Context, input ContextInput) (*C
 		}
 	}
 
-	if input.Project != "" && (includeSet["decisions"] || includeSet["project_state"]) {
-		decisions := s.collectDecisions(ctx, input.Project, input.ExcludeArchived)
+	if projectID != "" && (includeSet["decisions"] || includeSet["project_state"]) {
+		decisions := s.collectDecisions(ctx, projectID, input.ExcludeArchived)
 		if decisions != "" {
 			addSection("Active Decisions", decisions)
 		}
 	}
 
-	if input.Project != "" && includeSet["pending"] {
-		pending := s.collectPending(ctx, input.Project)
+	if projectID != "" && includeSet["pending"] {
+		pending := s.collectPending(ctx, projectID)
 		if pending != "" {
 			addSection("Active Pending", pending)
 		}
@@ -146,28 +161,28 @@ func (s *ContextService) GetContext(ctx context.Context, input ContextInput) (*C
 	}
 
 	if includeSet["recent_sessions"] {
-		sessions := s.collectRecentSessions(ctx, input.Project, input.ExcludeArchived)
+		sessions := s.collectRecentSessions(ctx, projectID, input.ExcludeArchived)
 		if sessions != "" {
 			addSection("Recent Sessions", sessions)
 		}
 	}
 
 	if includeSet["artifact_summaries"] {
-		artifacts := s.collectArtifactSummaries(ctx, input.Project)
+		artifacts := s.collectArtifactSummaries(ctx, projectID)
 		if artifacts != "" {
 			addSection("Artifact Summaries", artifacts)
 		}
 	}
 
 	if includeSet["references"] {
-		refs := s.collectReferences(ctx, input.Project, input.ExcludeArchived)
+		refs := s.collectReferences(ctx, projectID, input.ExcludeArchived)
 		if refs != "" {
 			addSection("References", refs)
 		}
 	}
 
 	if !input.ExcludeArchived {
-		archived := s.collectArchived(ctx, input.Project)
+		archived := s.collectArchived(ctx, projectID)
 		if archived != "" {
 			addSection("Archived", archived)
 		}
@@ -182,10 +197,10 @@ func (s *ContextService) GetContext(ctx context.Context, input ContextInput) (*C
 
 	if input.Format == "compact" {
 		var b strings.Builder
-		projName := input.Project
+		projName := projectID
 		if projName == "" {
 			projName = "global"
-		} else if proj, err := s.projectStore.Get(ctx, input.Project); err == nil {
+		} else if proj, err := s.projectStore.Get(ctx, projectID); err == nil {
 			projName = proj.Name
 		}
 		b.WriteString(fmt.Sprintf("# CTX: %s (mode=%s)\n", projName, input.Mode))

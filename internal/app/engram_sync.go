@@ -170,10 +170,13 @@ func (s *EntryService) SyncEngram(ctx context.Context, opts EngramSyncOptions) (
 
 		if targetProj != "" {
 			if _, err := s.projectStore.Get(ctx, targetProj); err != nil {
+				// Auto-created on sync: store the canonical slug, not the
+				// raw reference, so the project resolves by `--project
+				// <slug>` like one created with add-project.
 				_ = s.projectStore.Save(ctx, domain.Project{
 					ID:     targetProj,
 					Name:   targetProj,
-					Slug:   targetProj,
+					Slug:   slugify(targetProj),
 					Status: domain.StatusActive,
 				})
 			}

@@ -131,6 +131,30 @@ func TestParseSubcommand(t *testing.T) {
 	}
 }
 
+// TestContextAliasPreservesProjectFlag covers the alias/flag collision
+// found by the e2e pilot: `skillvault context --project <slug>` resolved
+// to get-context but the --project flag was swallowed by the "context
+// project" alias match, so the pack came back empty. ParseCommand alone
+// cannot catch it (it only returns the command name); the flag must
+// survive normalization into ParseGetContextFlags.
+func TestContextAliasPreservesProjectFlag(t *testing.T) {
+	args := []string{"skillvault", "context", "--project", "codex"}
+	cmd, err := ParseCommand(args)
+	if err != nil {
+		t.Fatalf("ParseCommand failed: %v", err)
+	}
+	if cmd != "get-context" {
+		t.Fatalf("expected get-context, got %q", cmd)
+	}
+	flags, err := ParseGetContextFlags(NormalizeArgs(args))
+	if err != nil {
+		t.Fatalf("ParseGetContextFlags failed: %v", err)
+	}
+	if flags.Project != "codex" {
+		t.Errorf("expected project codex, got %q", flags.Project)
+	}
+}
+
 func TestParseAddEntryFlags(t *testing.T) {
 	tests := []struct {
 		name    string

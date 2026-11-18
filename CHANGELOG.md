@@ -2,6 +2,16 @@
 
 All notable changes to SkillVault Qu@ntum are documented here.
 
+## v3.7.1 — Agent Discoverability & Slug Fixes
+
+**2026-11-18**
+
+### Fixed
+- **Slug resolution in `search` and `get-context`**: `search --project <slug>` no longer returns an empty result (`resolveProjectRef`); `get-context --project <slug>` now returns the project's decisions instead of an empty pack (`GetContext` resolves the slug once to the canonical ID for the header and all collectors).
+- **`context --project <slug>` empty pack**: flag tokens no longer match multi-word command aliases (`context --project` no longer collides with the `context project` alias); same guard in help-topic resolution.
+- **`link-project` marker paths**: the AGENTS.md marker now writes the real vault path (respects `SKILLVAULT_HOME`) and the absolute binary path instead of the default `~/.skillvault/vault.db` and the bare `skillvault` name.
+- **Project slug on creation**: `add-project` (and the other creation paths) now slugifies the project name with the same helper as entries (`Verify Paths` → `verify-paths`, empty → `untitled`, collisions → `slug-2`, `slug-3`); resolution stays id-or-slug, so the raw name no longer resolves for newly created projects (existing rows keep their stored slug).
+
 ## v3.7.0 — Episodic Promotion, Semantic Graph Relations & 8-Layer Anatomical Architecture
 
 **2026-11-18**

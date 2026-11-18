@@ -263,7 +263,7 @@ func (s *EntryService) SearchEntries(ctx context.Context, query string, filters 
 	// slugs via projectStore.Get; without this a slug filters project_id to
 	// zero rows and the search silently reports "No results found."
 	if q.ProjectID != nil && strings.TrimSpace(*q.ProjectID) != "" {
-		id, err := s.resolveProjectRef(ctx, *q.ProjectID)
+		id, err := resolveProjectRef(ctx, s.projectStore, *q.ProjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -276,14 +276,14 @@ func (s *EntryService) SearchEntries(ctx context.Context, query string, filters 
 // canonical project ID. projectStore.Get already matches id OR slug; the
 // read paths must use it instead of passing the raw reference to the store,
 // where it would be compared against project_id only.
-func (s *EntryService) resolveProjectRef(ctx context.Context, ref string) (string, error) {
+func resolveProjectRef(ctx context.Context, store db.ProjectStore, ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return "", nil
 	}
-	proj, err := s.projectStore.Get(ctx, ref)
+	proj, err := store.Get(ctx, ref)
 	if err != nil {
-		return "", s.unknownProjectError(ctx, ref)
+		return "", unknownProjectError(ctx, store, ref)
 	}
 	return proj.ID, nil
 }
@@ -291,8 +291,8 @@ func (s *EntryService) resolveProjectRef(ctx context.Context, ref string) (strin
 // unknownProjectError builds a "project not found" error that lists the
 // known projects (slug + ID) so the caller can retry with a valid value
 // instead of mistaking an unknown project for an empty result.
-func (s *EntryService) unknownProjectError(ctx context.Context, ref string) error {
-	projects, err := s.projectStore.List(ctx, false)
+func unknownProjectError(ctx context.Context, store db.ProjectStore, ref string) error {
+	projects, err := store.List(ctx, false)
 	if err != nil || len(projects) == 0 {
 		return fmt.Errorf("project %q not found", ref)
 	}
@@ -309,7 +309,7 @@ func (s *EntryService) unknownProjectError(ctx context.Context, ref string) erro
 
 func (s *EntryService) List(ctx context.Context, filter domain.EntryFilter) ([]domain.EntryListResult, error) {
 	if filter.ProjectID != nil && strings.TrimSpace(*filter.ProjectID) != "" {
-		id, err := s.resolveProjectRef(ctx, *filter.ProjectID)
+		id, err := resolveProjectRef(ctx, s.projectStore, *filter.ProjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -372,7 +372,7 @@ func (s *EntryService) SearchByTags(ctx context.Context, tags []string, matchAll
 		return nil, fmt.Errorf("at least one tag is required")
 	}
 	if projectPtr != nil && strings.TrimSpace(*projectPtr) != "" {
-		id, err := s.resolveProjectRef(ctx, *projectPtr)
+		id, err := resolveProjectRef(ctx, s.projectStore, *projectPtr)
 		if err != nil {
 			return nil, err
 		}

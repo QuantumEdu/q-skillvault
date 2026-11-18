@@ -114,7 +114,7 @@ func LinkProject(w io.Writer, svc *Services, projectRef, dir string) error {
 		return fmt.Errorf("project path %q is not a directory", dir)
 	}
 
-	section := skillvaultMarkerSection(proj)
+	section := skillvaultMarkerSection(proj, markerVaultPath(), markerBinaryPath())
 	path := filepath.Join(dir, "AGENTS.md")
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -147,7 +147,7 @@ func unknownProjectHint(ctx context.Context, svc *Services, ref string) error {
 	return fmt.Errorf("project %q not found; known projects: %s (see 'skillvault list-projects')", ref, strings.Join(names, ", "))
 }
 
-func skillvaultMarkerSection(proj *domain.Project) string {
+func skillvaultMarkerSection(proj *domain.Project, vaultPath, binaryPath string) string {
 	slug := proj.Slug
 	if slug == "" {
 		slug = proj.Name
@@ -158,12 +158,35 @@ func skillvaultMarkerSection(proj *domain.Project) string {
 	b.WriteString("\n")
 	b.WriteString("This project keeps its decisions in SkillVault, a local knowledge vault.\n")
 	b.WriteString("\n")
-	b.WriteString("- Vault: `~/.skillvault/vault.db` (binary: `skillvault`)\n")
+	// Name the real vault and the absolute binary path: the marker used to
+	// hardcode ~/.skillvault/vault.db and a bare `skillvault`, so an agent
+	// following it could hit a different vault (or an older binary) when
+	// SKILLVAULT_HOME points elsewhere or PATH resolves another install.
+	fmt.Fprintf(&b, "- Vault: `%s` (binary: `%s`)\n", vaultPath, binaryPath)
 	fmt.Fprintf(&b, "- Project: %s (slug `%s`, id `%s`)\n", proj.Name, slug, proj.ID)
-	fmt.Fprintf(&b, "- Before answering about project conventions or changing code, check the vault first: `skillvault find \"<topic>\" --project %s`\n", slug)
-	fmt.Fprintf(&b, "- For a full context pack: `skillvault context --project %s`\n", slug)
+	fmt.Fprintf(&b, "- Before answering about project conventions or changing code, check the vault first: `%s find \"<topic>\" --project %s`\n", binaryPath, slug)
+	fmt.Fprintf(&b, "- For a full context pack: `%s context --project %s`\n", binaryPath, slug)
 	b.WriteString(skillvaultMarkerEnd)
 	return b.String()
+}
+
+// markerVaultPath returns the absolute path of the vault database this
+// process operates on (dbPath honors SKILLVAULT_HOME).
+func markerVaultPath() string {
+	if abs, err := filepath.Abs(dbPath()); err == nil {
+		return abs
+	}
+	return dbPath()
+}
+
+// markerBinaryPath returns the absolute path of the running binary so the
+// marker invokes this binary instead of whatever `skillvault` resolves to
+// in the agent's PATH (which may be an older version).
+func markerBinaryPath() string {
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		return exe
+	}
+	return "skillvault"
 }
 
 // upsertMarkerSection replaces the marked section if present, otherwise

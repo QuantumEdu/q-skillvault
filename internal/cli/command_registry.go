@@ -166,12 +166,31 @@ func ResolveTopLevelCommand(parts []string) (string, int, bool) {
 		maxParts = len(parts)
 	}
 	for width := maxParts; width >= 1; width-- {
+		// A flag token (e.g. --project) can never be part of a multi-word
+		// command alias: normalizeCommandKey strips the dashes, so
+		// "context --project" would otherwise match the "context project"
+		// alias and swallow the flag, leaving get-context with no project.
+		// Only bare words participate in multi-word alias matching.
+		if width > 1 && hasFlagToken(parts[1:width]) {
+			continue
+		}
 		key := normalizeCommandKey(strings.Join(parts[:width], " "))
 		if id, ok := topLevelAliasIndex[key]; ok {
 			return id, width, true
 		}
 	}
 	return "", 0, false
+}
+
+// hasFlagToken reports whether any part looks like a CLI flag (starts with
+// "-"). Flags are arguments, never words of a command alias.
+func hasFlagToken(parts []string) bool {
+	for _, p := range parts {
+		if strings.HasPrefix(p, "-") {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveHelpTopic resolves side-effect-free help and docs shortcuts.
@@ -181,6 +200,12 @@ func ResolveHelpTopic(parts []string) (string, bool, bool) {
 		maxParts = len(parts)
 	}
 	for width := maxParts; width >= 1; width-- {
+		// Same flag guard as ResolveTopLevelCommand: a flag token is not
+		// part of a help-topic phrase (e.g. "context --help" must not match
+		// the "context help" topic).
+		if width > 1 && hasFlagToken(parts[1:width]) {
+			continue
+		}
 		key := normalizeCommandKey(strings.Join(parts[:width], " "))
 		if topic, ok := helpTopicIndex[key]; ok {
 			return topic.CommandID, topic.CommandID != "", true

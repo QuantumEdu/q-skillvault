@@ -1,7 +1,7 @@
 ---
 name: q:skillvault
 description: "Trigger: /q-skillvault, /skillvault, skillvault, q-skillvault, vault de skills, knowledge vault, base de conocimiento, line factory, mcp skillvault, context bundle, mem promote, episodic memory, semantic graph. Runtime de conocimiento local-first de 8 capas para desarrolladores y agentes IA: Memoria Episódica soberana (dedupe O(1) + supersesión + ciclo de vida), Compilador de Contexto en 7 modos, Workflows y Pipelines, Productividad/Handoffs, Telemetría Agéntica, Seguridad/Secretos, Almacenamiento Híbrido SQLite+FTS5, servidor MCP stdio (44 herramientas), fábrica issue-to-PR (line) y grafo semántico de conocimiento."
-version: 3.7.0
+version: 3.7.1
 license: MIT
 metadata:
   author: Gabriel Magallon Sanchez - Qu@antum
