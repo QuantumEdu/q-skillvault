@@ -323,8 +323,13 @@ func (s *EntryService) SearchVaultMem(ctx context.Context, input VaultMemSearchI
 
 	var projectPtr *string
 	if strings.TrimSpace(input.Project) != "" {
-		p := strings.TrimSpace(input.Project)
-		projectPtr = &p
+		// Resolve ID or slug to the canonical project ID, like the other
+		// read paths; a raw slug would filter project_id to zero rows.
+		id, err := s.resolveProjectRef(ctx, input.Project)
+		if err != nil {
+			return nil, err
+		}
+		projectPtr = &id
 	}
 
 	var typePtr *string

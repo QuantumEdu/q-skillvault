@@ -214,6 +214,7 @@ Para exponer el conocimiento del vault a agentes (Claude Code, OpenCode, Cursor,
 1. **Al iniciar un proyecto**:
    - Registrar el repo en `line`: `line project add <id> --repo <path>`.
    - Inicializar el contexto del proyecto en `skillvault`: `skillvault save "Contexto Inicial" --type project ...`.
+   - Vincular el proyecto al vault para que los agentes lo encuentren: `skillvault link-project --project <slug>` (escribe un marcador en `AGENTS.md`).
 2. **Durante el desarrollo**:
    - Guardar decisiones técnicas y gotchas descubiertos con `skillvault save`.
    - Si surge un issue de GitHub, delegarlo a `line run <issue-url>` y monitorearlo con `line tui`.

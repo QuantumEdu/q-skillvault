@@ -37,6 +37,7 @@ These aliases are additive shortcuts. The original commands still work.
 | `project start` | `add-project` |
 | `project add` | `add-project` |
 | `project list` | `list-projects` |
+| `project link` | `link-project` |
 | `backup all` | `backup` |
 | `setup mcp` | `mcp config` |
 | `mcp setup` | `mcp config` |
@@ -164,13 +165,15 @@ skillvault search "grid css" --type skill --purpose KNOWLEDGE --project web --st
 |------|-------------|
 | `--type` | Filter by entry type |
 | `--purpose` | Filter by purpose (`WORK`, `KNOWLEDGE`, `LEARNING`, `RELATIONSHIP`, `STATE`, `OBSERVABILITY`) |
-| `--project` | Filter by project |
+| `--project` | Filter by project (ID or slug) |
 | `--tag` | Filter by individual tag |
 | `--include-archived` | Include archived entries |
 | `--limit` | Max results (default: 20) |
 | `--vector` | Use cosine similarity search (requires loaded vectors) |
 
 Search uses FTS5 with `porter unicode61` tokenizer. It searches title, summary, content, and tags.
+
+`--project` accepts a project ID or slug (the write path already did; the read path now resolves both). An unknown project fails with the list of known projects instead of an empty result.
 
 `--vector` enables semantic search with GloVe vectors (if configured via `SKILLVAULT_GLOVE_PATH`).
 
@@ -387,6 +390,26 @@ List all projects.
 ```bash
 skillvault list-projects
 ```
+
+---
+
+## `link-project`
+
+Link a project directory to the vault by writing a SkillVault marker section into its `AGENTS.md`. The marker tells any agent that reads the project folder that the project keeps decisions in SkillVault, which binary to call and which project to query.
+
+```bash
+skillvault link-project --project myapp
+skillvault link-project --project myapp --path /home/user/code/myapp
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--project` | ✅ | Project slug or ID |
+| `--path` | ❌ | Project directory (default: current directory) |
+
+Idempotent: re-running replaces the marked section instead of duplicating it. Existing `AGENTS.md` content outside the markers is preserved. An unknown project fails with the list of known projects.
+
+Alias: `skillvault project link`
 
 ---
 
