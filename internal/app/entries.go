@@ -258,10 +258,63 @@ func (s *EntryService) SearchEntries(ctx context.Context, query string, filters 
 			return nil, fmt.Errorf("validate purpose filter: %w", err)
 		}
 	}
+	// Resolve the --project reference (ID or slug) to the canonical project
+	// ID. The flag promises "slug or ID" and the write path already resolves
+	// slugs via projectStore.Get; without this a slug filters project_id to
+	// zero rows and the search silently reports "No results found."
+	if q.ProjectID != nil && strings.TrimSpace(*q.ProjectID) != "" {
+		id, err := s.resolveProjectRef(ctx, *q.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		q.ProjectID = &id
+	}
 	return s.store.Search(ctx, q)
 }
 
+// resolveProjectRef resolves a project reference (ID or slug) to the
+// canonical project ID. projectStore.Get already matches id OR slug; the
+// read paths must use it instead of passing the raw reference to the store,
+// where it would be compared against project_id only.
+func (s *EntryService) resolveProjectRef(ctx context.Context, ref string) (string, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", nil
+	}
+	proj, err := s.projectStore.Get(ctx, ref)
+	if err != nil {
+		return "", s.unknownProjectError(ctx, ref)
+	}
+	return proj.ID, nil
+}
+
+// unknownProjectError builds a "project not found" error that lists the
+// known projects (slug + ID) so the caller can retry with a valid value
+// instead of mistaking an unknown project for an empty result.
+func (s *EntryService) unknownProjectError(ctx context.Context, ref string) error {
+	projects, err := s.projectStore.List(ctx, false)
+	if err != nil || len(projects) == 0 {
+		return fmt.Errorf("project %q not found", ref)
+	}
+	names := make([]string, 0, len(projects))
+	for _, p := range projects {
+		if p.Slug != "" && p.Slug != p.ID {
+			names = append(names, fmt.Sprintf("%s (%s)", p.Slug, p.ID))
+		} else {
+			names = append(names, p.ID)
+		}
+	}
+	return fmt.Errorf("project %q not found; known projects: %s (use --project <id or slug>; see 'skillvault list-projects')", ref, strings.Join(names, ", "))
+}
+
 func (s *EntryService) List(ctx context.Context, filter domain.EntryFilter) ([]domain.EntryListResult, error) {
+	if filter.ProjectID != nil && strings.TrimSpace(*filter.ProjectID) != "" {
+		id, err := s.resolveProjectRef(ctx, *filter.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		filter.ProjectID = &id
+	}
 	return s.store.List(ctx, filter)
 }
 
@@ -317,6 +370,13 @@ func (s *EntryService) SearchByTags(ctx context.Context, tags []string, matchAll
 	tags = domain.NormalizeTags(tags)
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("at least one tag is required")
+	}
+	if projectPtr != nil && strings.TrimSpace(*projectPtr) != "" {
+		id, err := s.resolveProjectRef(ctx, *projectPtr)
+		if err != nil {
+			return nil, err
+		}
+		projectPtr = &id
 	}
 	return s.store.SearchByTags(ctx, tags, matchAll, typePtr, projectPtr, limit)
 }

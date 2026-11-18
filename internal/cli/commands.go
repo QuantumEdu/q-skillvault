@@ -144,7 +144,7 @@ func ParseCommand(args []string) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown %s subcommand: %s (use add, get, search, list)", sub, sub2)
 		}
-	case "add-entry", "search", "save-artifact", "get-context", "add-project", "session-wrap":
+	case "add-entry", "search", "save-artifact", "get-context", "add-project", "link-project", "session-wrap":
 		return sub, nil
 	case "get", "archive":
 		if len(args) < 3 {
@@ -599,6 +599,35 @@ func ParseGetContextFlags(args []string) (*GetContextFlags, error) {
 type AddProjectFlags struct {
 	Name        string
 	Description string
+}
+
+// LinkProjectFlags holds the project reference and target directory for link-project.
+type LinkProjectFlags struct {
+	Project string
+	Path    string
+}
+
+// ParseLinkProjectFlags parses link-project-specific flags from args.
+func ParseLinkProjectFlags(args []string) (*LinkProjectFlags, error) {
+	flags := &LinkProjectFlags{}
+
+	fs := flag.NewFlagSet("link-project", flag.ContinueOnError)
+	fs.StringVar(&flags.Project, "project", "", "Project slug or ID (required)")
+	fs.StringVar(&flags.Path, "path", "", "Project directory (default: current directory)")
+
+	fs.SetOutput(&nullWriter{})
+
+	if len(args) > 2 {
+		if err := fs.Parse(args[2:]); err != nil {
+			return nil, fmt.Errorf("parse link-project flags: %w", err)
+		}
+	}
+
+	if flags.Project == "" {
+		return nil, fmt.Errorf("--project is required")
+	}
+
+	return flags, nil
 }
 
 // ParseAddProjectFlags parses add-project-specific flags from args.

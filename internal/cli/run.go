@@ -69,6 +69,8 @@ func Run(cmd string, args []string) {
 		runListProjects(ctx, svc, args)
 	case "add-project":
 		runAddProject(ctx, svc, args)
+	case "link-project":
+		runLinkProject(ctx, svc, args)
 	case "save-result":
 		runSaveResult(ctx, svc, args)
 	case "stats":
