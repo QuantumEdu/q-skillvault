@@ -164,6 +164,25 @@ func (s *sqliteEntryStore) BumpDuplicate(ctx context.Context, id string) error {
 	return nil
 }
 
+// GetDuplicateCount returns the current duplicate_count for an entry.
+// Returns 0 if the entry does not exist or the column is NULL.
+func (s *sqliteEntryStore) GetDuplicateCount(ctx context.Context, id string) (int, error) {
+	var count sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT duplicate_count FROM entries WHERE id = ?`, id,
+	).Scan(&count)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("entry %q not found", id)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get duplicate count for %s: %w", id, err)
+	}
+	if !count.Valid {
+		return 0, nil
+	}
+	return int(count.Int64), nil
+}
+
 // MemoryHints carries the memory-only fields written alongside an entry.
 type MemoryHints struct {
 	NormalizedHash string

@@ -1,5 +1,77 @@
 # Architecture
 
+## Overview: 8-Layer Functional Architecture
+
+SkillVault is not a simple KV store or note-taking app. It is an 8-layer knowledge runtime with an episodic memory engine, adaptive context compiler, agentic telemetry, and an integrated PR factory.
+
+```mermaid
+flowchart TD
+    subgraph ACCESS["Access Interfaces"]
+        CLI["CLI\n(commands)"]
+        MCP["MCP Stdio\n(44 tools)"]
+        HTTP["HTTP REST\n(internal)"]
+        TUI["BubbleTea\nTUI"]
+    end
+
+    subgraph L1["Layer 1 · Episodic Memory & Quality"]
+        MEM["vault_mem_* suite\ndedupe SHA-256 O(1)\nsupersession · lifecycle hints\nprivate-tag redaction\nmem promote"]
+    end
+
+    subgraph L2["Layer 2 · Context Compiler (7 Modes)"]
+        CTX["planning · project · full_brief\nprofile · workflow · skill · session_recall\ntoken-aware truncation · pending injection"]
+    end
+
+    subgraph L3["Layer 3 · Workflows & Pipelines"]
+        WF["YAML import · DAG runs\nroute_scenario · step analytics"]
+    end
+
+    subgraph L4["Layer 4 · Productivity & Handoffs"]
+        PROD["instructions/cmd · link/bookmarks\npending · session-wrap · handoffs"]
+    end
+
+    subgraph L5["Layer 5 · Agentic Telemetry"]
+        TEL["loopdetector · token counter\ninjection detector · entropy scanner"]
+    end
+
+    subgraph L6["Layer 6 · Security & Secrets"]
+        SEC["q-secrets (AES-256-GCM + keychain)\nmcp audit · secret redaction"]
+    end
+
+    subgraph STORE["Hybrid Storage"]
+        DB["SQLite FTS5\n(entries, tags, links,\ninstructions, workflows, runs)\nentry_links typed semantic graph"]
+        DISK["Disk (~/.skillvault/objects/)\nfor large artifacts · diff LCS"]
+    end
+
+    ACCESS --> L1
+    ACCESS --> L2
+    ACCESS --> L3
+    ACCESS --> L4
+    ACCESS --> L5
+    ACCESS --> L6
+    L1 --> STORE
+    L2 --> STORE
+    L3 --> STORE
+    L4 --> STORE
+    L5 --> STORE
+    L6 --> STORE
+```
+
+### Functional Modules Summary
+
+| Layer | Module | Key Files | Responsibility |
+|:---:|:---|:---|:---|
+| 1 | Episodic Memory & Quality | `internal/app/vault_mem.go`, `internal/db/memory_quality.go` | SHA-256 dedupe O(1), supersession, lifecycle hints, `StripPrivateTags`, `mem promote` |
+| 2 | Context Compiler | `internal/context/compiler.go` | 7 adaptive modes, token-aware truncation, priority-based section ranking, pending injection |
+| 3 | Workflows & Pipelines | `internal/app/workflows.go`, `workflow_runs.go` | YAML import, DAG execution, `route_scenario`, step analytics |
+| 4 | Productivity & Handoffs | `internal/app/instruction.go`, `link.go`, `session.go` | `cmd`/instructions, URL bookmarks, pending items, session wrap, agent handoffs |
+| 5 | Agentic Telemetry | `internal/agenttelemetry/` | Loop detection, token counting, injection detection, entropy scanning, telemetryd daemon |
+| 6 | Security & Secrets | `internal/security/`, `q-secrets/` | AES-256-GCM keychain, MCP config audit, `<private>` block redaction, secret scanner |
+| — | Hybrid Storage | `internal/db/`, `internal/files/` | SQLite FTS5 + typed `entry_links` semantic graph + disk artifact objects |
+
+---
+
+## Clean Architecture (internal)
+
 SkillVault sigue **Clean Architecture** (light):
 
 ```
@@ -189,3 +261,7 @@ Dos modos:
 | `modernc.org/sqlite` | Única dependencia externa. Sin CGO. Binario portable. |
 | FTS5 standalone | `CREATE VIRTUAL TABLE` sin content= para compatibilidad con in-memory SQLite en tests |
 | SHA256 hashing | Verificación de integridad de artefactos sin depender de git |
+| Normalized hash dedupe | SHA-256 of trimmed+lowercased content provides O(1) dedupe on the memory write path without scanning the full project |
+| Typed `entry_links` | `depends_on`, `contradicts`, `cites`, `supersedes`, `part_of` relations enable a semantic knowledge graph without a graph DB |
+| `mem promote` | Frequent observations (`duplicate_count >= threshold`) are promoted to formal `decision`/`skill` entries to build canonical knowledge from agent-learned facts |
+| `StripPrivateTags` | `<private>…</private>` blocks are redacted to `[REDACTED]` before FTS5 indexing and context compilation, preventing credential leaks |

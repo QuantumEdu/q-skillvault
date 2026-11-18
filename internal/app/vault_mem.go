@@ -663,3 +663,128 @@ func (s *VaultMemService) Context(ctx context.Context, project string) (string, 
 
 	return b.String(), nil
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// mem promote
+// ──────────────────────────────────────────────────────────────────────────────
+
+// PromoteVaultMemInput holds parameters for promoting an episodic observation to
+// a canonical knowledge entry (decision, skill, etc.).
+type PromoteVaultMemInput struct {
+	// ID of the episodic memory observation to promote. Required.
+	ID string `json:"id"`
+	// TargetType is the canonical entry type the observation should become.
+	// Accepted: decision, skill, reference, architecture. Defaults to "decision".
+	TargetType string `json:"type"`
+	// Project to store the promoted entry under. If empty, keeps the same project
+	// as the source observation.
+	Project string `json:"project"`
+	// MinDuplicateCount gates promotion: only observations that have been
+	// re-learned this many times or more are promoted. 0 means always promote.
+	MinDuplicateCount int `json:"min_duplicate_count"`
+}
+
+// PromoteVaultMemResult carries the result of a promote operation.
+type PromoteVaultMemResult struct {
+	// SourceID is the ID of the original episodic observation.
+	SourceID string `json:"source_id"`
+	// PromotedID is the ID of the newly created canonical entry.
+	PromotedID string `json:"promoted_id"`
+	// Title of the promoted entry.
+	Title string `json:"title"`
+	// Type of the promoted entry.
+	Type string `json:"type"`
+	// Skipped is true when the observation did not meet the MinDuplicateCount threshold.
+	Skipped bool `json:"skipped,omitempty"`
+	// Reason explains why the promote was skipped (if Skipped is true).
+	Reason string `json:"reason,omitempty"`
+}
+
+// PromoteVaultMem promotes an episodic observation to a canonical knowledge entry.
+//
+// Promotion means: read the source observation, create a formal entry of the
+// requested type (stripping the "mem" and episodic tags, adding "promoted-from:<id>"),
+// and return the new entry ID. The original observation is not archived so it
+// keeps its history and supersession chain intact.
+func (s *EntryService) PromoteVaultMem(ctx context.Context, input PromoteVaultMemInput) (*PromoteVaultMemResult, error) {
+	if strings.TrimSpace(input.ID) == "" {
+		return nil, fmt.Errorf("promote: id is required")
+	}
+
+	// Read the source observation.
+	src, err := s.store.Get(ctx, strings.TrimSpace(input.ID), false)
+	if err != nil {
+		return nil, fmt.Errorf("promote: source observation %q not found: %w", input.ID, err)
+	}
+
+	// Gate on duplicate_count when a minimum is requested.
+	dupCount, _ := s.store.GetDuplicateCount(ctx, src.Entry.ID)
+	if input.MinDuplicateCount > 0 && dupCount < input.MinDuplicateCount {
+		return &PromoteVaultMemResult{
+			SourceID: src.Entry.ID,
+			Skipped:  true,
+			Reason:   fmt.Sprintf("duplicate_count %d < required %d", dupCount, input.MinDuplicateCount),
+		}, nil
+	}
+
+	// Resolve target type.
+	targetType := strings.TrimSpace(input.TargetType)
+	if targetType == "" {
+		targetType = "decision"
+	}
+	mappedType, _ := MapObservationType(targetType)
+
+	// Resolve project.
+	project := strings.TrimSpace(input.Project)
+	if project == "" && src.Entry.ProjectID != nil {
+		project = *src.Entry.ProjectID
+	}
+
+	// Build a clean tag list: drop "mem" and episodic source tags, keep everything else,
+	// add a provenance tag.
+	var promotedTags []string
+	for _, t := range src.Tags {
+		name := strings.ToLower(t.Name)
+		if name == "mem" || strings.HasPrefix(name, "scope:") {
+			continue
+		}
+		promotedTags = append(promotedTags, t.Name)
+	}
+	promotedTags = append(promotedTags, "promoted-from:"+src.Entry.ID)
+
+	content := src.Entry.BodyOptional
+	if content == "" {
+		content = src.Entry.Summary
+	}
+
+	saveInput := SaveEntryInput{
+		Title:   src.Entry.Title,
+		Type:    string(mappedType),
+		Summary: src.Entry.Summary,
+		Body:    content,
+		Project: project,
+		Tags:    promotedTags,
+		Status:  string(domain.StatusActive),
+		Purpose: string(domain.PurposeKnowledge),
+	}
+
+	res, err := s.SaveEntry(ctx, saveInput)
+	if err != nil {
+		return nil, fmt.Errorf("promote: save canonical entry: %w", err)
+	}
+
+	return &PromoteVaultMemResult{
+		SourceID:   src.Entry.ID,
+		PromotedID: res.Entry.Entry.ID,
+		Title:      res.Entry.Entry.Title,
+		Type:       string(mappedType),
+	}, nil
+}
+
+// Promote delegates to EntryService.PromoteVaultMem.
+func (s *VaultMemService) Promote(ctx context.Context, input PromoteVaultMemInput) (*PromoteVaultMemResult, error) {
+	if s.entrySvc == nil {
+		return nil, fmt.Errorf("entry service not available")
+	}
+	return s.entrySvc.PromoteVaultMem(ctx, input)
+}

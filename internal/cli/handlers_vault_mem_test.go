@@ -144,3 +144,32 @@ func TestParseMemContextFlags(t *testing.T) {
 		}
 	})
 }
+
+func TestParseMemPromoteFlags(t *testing.T) {
+	t.Run("valid promote positional", func(t *testing.T) {
+		got, err := parseMemPromoteFlags([]string{"skillvault", "mem", "promote", "obs-456", "--type", "skill", "--project", "my-proj", "--min-duplicates", "2", "--json"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.ID != "obs-456" || got.Type != "skill" || got.Project != "my-proj" || got.MinDuplicateCount != 2 || !got.JSON {
+			t.Errorf("unexpected result: %+v", got)
+		}
+	})
+
+	t.Run("valid promote with flag id", func(t *testing.T) {
+		got, err := parseMemPromoteFlags([]string{"skillvault", "mem", "promote", "--id", "obs-789", "--type", "architecture"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.ID != "obs-789" || got.Type != "architecture" {
+			t.Errorf("unexpected result: %+v", got)
+		}
+	})
+
+	t.Run("missing id", func(t *testing.T) {
+		_, err := parseMemPromoteFlags([]string{"skillvault", "mem", "promote"})
+		if err == nil {
+			t.Errorf("expected error for missing id")
+		}
+	})
+}

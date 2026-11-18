@@ -1,12 +1,12 @@
 ---
 name: q:skillvault
-description: "Trigger: /q-skillvault, /skillvault, skillvault, q-skillvault, vault de skills, knowledge vault, base de conocimiento, line factory, mcp skillvault, context bundle. Knowledge Operating System local-first para desarrolladores y agentes IA: almacenamiento híbrido (SQLite+FTS5), compilación contextual de 7 modos, MCP stdio server, router semántico y fábrica determinista issue-to-PR (line)."
-version: 3.3.0
+description: "Trigger: /q-skillvault, /skillvault, skillvault, q-skillvault, vault de skills, knowledge vault, base de conocimiento, line factory, mcp skillvault, context bundle, mem promote, episodic memory, semantic graph. Runtime de conocimiento local-first de 8 capas para desarrolladores y agentes IA: Memoria Episódica soberana (dedupe O(1) + supersesión + ciclo de vida), Compilador de Contexto en 7 modos, Workflows y Pipelines, Productividad/Handoffs, Telemetría Agéntica, Seguridad/Secretos, Almacenamiento Híbrido SQLite+FTS5, servidor MCP stdio (44 herramientas), fábrica issue-to-PR (line) y grafo semántico de conocimiento."
+version: 3.7.0
 license: MIT
 metadata:
   author: Gabriel Magallon Sanchez - Qu@antum
   date: "2026-09-19"
-  updated_at: "2026-10-04"
+  updated_at: "2026-11-18"
   repository: "https://github.com/QuantumEdu/q-skillvault"
 ---
 
@@ -14,20 +14,54 @@ metadata:
 
 ## Objetivo y Filosofía
 
-**q-skillvault** (Qu@ntum) es un sistema operativo de conocimiento local-first diseñado específicamente para cerrar la brecha entre desarrolladores de software y agentes de Inteligencia Artificial.
+**q-skillvault** (Qu@ntum) es un **runtime de conocimiento local-first de 8 capas** diseñado para cerrar la brecha entre desarrolladores de software y agentes de IA. No es un simple archivo de notas ni un KV store: es un sistema operativo de conocimiento con motor de memoria episódica soberano, compilador de contexto adaptativo, telemetría agéntica y fábrica de PRs integrada.
 
 - **Autor:** Gabriel Magallon Sanchez - Qu@antum
 - **Organización:** QuantumEdu
 - **Licencia:** MIT ([LICENSE](https://github.com/QuantumEdu/q-skillvault/blob/main/LICENSE))
 - **Repositorio:** [https://github.com/QuantumEdu/q-skillvault](https://github.com/QuantumEdu/q-skillvault)
 
+### Arquitectura: 8 Capas Funcionales
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                       INTERFACES DE ACCESO                               │
+│  CLI (commands)  │  MCP Stdio (44 tools)  │  HTTP REST  │ BubbleTea TUI │
+├──────────────────────────────────────────────────────────────────────────┤
+│  CAPA 1 · Memoria Episódica & Calidad                                    │
+│  vault_mem_* · dedupe SHA-256 O(1) · supersesión · lifecycle hints       │
+│  mem save/search/get/timeline/context · StripPrivateTags · mem promote   │
+├──────────────────────────────────────────────────────────────────────────┤
+│  CAPA 2 · Compilador de Contexto (7 Modos)                               │
+│  planning · project · full_brief · profile · workflow · skill ·          │
+│  session_recall · presupuesto de tokens adaptativo · pending injection   │
+├──────────────────────────────────────────────────────────────────────────┤
+│  CAPA 3 · Workflows & Pipelines                                          │
+│  YAML import · DAG runs · route_scenario · step analytics                │
+├──────────────────────────────────────────────────────────────────────────┤
+│  CAPA 4 · Productividad & Handoffs                                       │
+│  instructions/cmd · link/bookmarks · pending · session-wrap · handoffs   │
+├──────────────────────────────────────────────────────────────────────────┤
+│  CAPA 5 · Telemetría Agéntica                                            │
+│  loopdetector · token counter · injection detector · entropy scanner     │
+├──────────────────────────────────────────────────────────────────────────┤
+│  CAPA 6 · Seguridad & Secretos                                           │
+│  q-secrets (AES-256-GCM + keychain) · mcp audit · secret redaction      │
+├──────────────────────────────────────────────────────────────────────────┤
+│                     ALMACENAMIENTO HÍBRIDO                               │
+│  SQLite FTS5 (entries, tags, links, instructions, workflows, runs)       │
+│  Disco (~/.skillvault/objects/) para artefactos extensos · diff LCS      │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
 ### Principios Fundamentales
 1. **Local-First & Zero Heavy Frameworks**: Binario único compilado en Go puro (`modernc.org/sqlite` sin CGO). Sin dependencias de servicios cloud obligatorios ni daemons pesados.
 2. **Almacenamiento Híbrido Estricto**:
    - *Metadatos, taxonomía LifeOS y FTS5* residen en SQLite (`~/.skillvault/vault.db`).
    - *Artefactos extensos* (análisis PDF, reportes, specs, logs) se persisten en disco (`~/.skillvault/objects/`) para no saturar la ventana de contexto de los modelos.
-3. **El Contexto como Producto (Qu@ntum Context Layer)**: No basta con almacenar; entrega la cantidad justa de contexto mediante 7 modos especializados, jerarquía de prioridades y truncado adaptativo consciente del presupuesto de tokens.
-4. **Fábrica Determinista Issue-to-PR (`line`)**: Orquestación agéntica de ciclo completo (plan → build → review → wait_ci → ready) ejecutada en git worktrees aislados con evaluador independiente.
+3. **Memoria Episódica Soberana**: Deduplicación O(1) por hash SHA-256 normalizado, supersesión histórica (topic_key + title), ciclo de vida (review_after, expires_at, pinned), redacción automática de bloques `<private>` y promoción de observaciones frecuentes a conocimiento canónico.
+4. **El Contexto como Producto (Qu@ntum Context Layer)**: No basta con almacenar; entrega la cantidad justa de contexto mediante 7 modos especializados, jerarquía de prioridades y truncado adaptativo consciente del presupuesto de tokens.
+5. **Fábrica Determinista Issue-to-PR (`line`)**: Orquestación agéntica de ciclo completo (plan → build → review → wait_ci → ready) ejecutada en git worktrees aislados con evaluador independiente.
 
 ---
 

@@ -493,3 +493,97 @@ func TestSaveVaultMem_StripPrivateTags(t *testing.T) {
 		t.Errorf("expected summary to redact private tag, got %q", res.Entry.Summary)
 	}
 }
+
+func TestPromoteVaultMem(t *testing.T) {
+	entrySvc, memSvc, cleanup := setupVaultMemTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// 1. Save an observation
+	obsInput := VaultMemSaveInput{
+		Title:    "Use SQLite WAL for concurrent readers",
+		Content:  "Enabling journal_mode=WAL allows readers not to block writers.",
+		Type:     "decision",
+		Project:  "wal-proj",
+		TopicKey: "storage/sqlite-wal",
+	}
+
+	saveRes, _, err := entrySvc.SaveVaultMem(ctx, obsInput)
+	if err != nil {
+		t.Fatalf("save observation failed: %v", err)
+	}
+	srcID := saveRes.Entry.ID
+
+	// 2. Test MinDuplicateCount gate (currently duplicate_count = 0)
+	skipRes, err := memSvc.Promote(ctx, PromoteVaultMemInput{
+		ID:                srcID,
+		TargetType:        "decision",
+		MinDuplicateCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("promote with min count failed: %v", err)
+	}
+	if !skipRes.Skipped {
+		t.Errorf("expected promote to be skipped when duplicate_count < 1")
+	}
+
+	// 3. Re-learn the fact so duplicate_count bumps
+	_, deduped, err := entrySvc.SaveVaultMem(ctx, obsInput)
+	if err != nil || !deduped {
+		t.Fatalf("expected fact to be deduplicated and duplicate_count bumped, err=%v, deduped=%v", err, deduped)
+	}
+
+	// 4. Now promote with MinDuplicateCount = 1 (should succeed)
+	promoteRes, err := memSvc.Promote(ctx, PromoteVaultMemInput{
+		ID:                srcID,
+		TargetType:        "decision",
+		MinDuplicateCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("promote failed: %v", err)
+	}
+	if promoteRes.Skipped {
+		t.Fatalf("expected promote to succeed, got skipped: %s", promoteRes.Reason)
+	}
+	if promoteRes.PromotedID == "" || promoteRes.PromotedID == srcID {
+		t.Errorf("expected new promoted entry ID distinct from src, got %s", promoteRes.PromotedID)
+	}
+	if promoteRes.Type != "decision" {
+		t.Errorf("expected type decision, got %s", promoteRes.Type)
+	}
+
+	// 5. Verify the promoted entry in store
+	promoted, err := entrySvc.GetEntry(ctx, promoteRes.PromotedID)
+	if err != nil {
+		t.Fatalf("failed to fetch promoted entry: %v", err)
+	}
+	if promoted.Entry.Entry.Title != obsInput.Title {
+		t.Errorf("expected title %q, got %q", obsInput.Title, promoted.Entry.Entry.Title)
+	}
+	if promoted.Entry.Entry.Type != domain.EntryTypeDecision {
+		t.Errorf("expected entry type decision, got %s", promoted.Entry.Entry.Type)
+	}
+
+	hasProvenance := false
+	for _, tag := range promoted.Entry.Tags {
+		if tag.Name == "promoted-from:"+srcID {
+			hasProvenance = true
+		}
+		if tag.Name == "mem" {
+			t.Errorf("expected 'mem' tag to be stripped from promoted canonical entry")
+		}
+	}
+	if !hasProvenance {
+		t.Errorf("expected promoted entry to have promoted-from tag")
+	}
+
+	// 6. Verify source observation still exists and is untouched
+	srcObs, err := entrySvc.GetEntry(ctx, srcID)
+	if err != nil {
+		t.Fatalf("source observation should still exist: %v", err)
+	}
+	if srcObs.Entry.Entry.Status != domain.StatusActive {
+		t.Errorf("source observation should remain active, got %s", srcObs.Entry.Entry.Status)
+	}
+}

@@ -458,3 +458,76 @@ func runMemContext(ctx context.Context, svc *Services, args []string) {
 
 	fmt.Println(ctxPack)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// mem promote
+// ──────────────────────────────────────────────────────────────────────────────
+
+type memPromoteFlags struct {
+	ID                string
+	Type              string
+	Project           string
+	MinDuplicateCount int
+	JSON              bool
+}
+
+func parseMemPromoteFlags(args []string) (memPromoteFlags, error) {
+	var f memPromoteFlags
+	fs := flag.NewFlagSet("mem-promote", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	fs.StringVar(&f.ID, "id", "", "ID of observation to promote")
+	fs.StringVar(&f.Type, "type", "decision", "Target canonical type (decision, skill, reference)")
+	fs.StringVar(&f.Project, "project", "", "Target project name")
+	fs.IntVar(&f.MinDuplicateCount, "min-duplicate-count", 0, "Minimum duplicate count threshold")
+	fs.IntVar(&f.MinDuplicateCount, "min-duplicates", 0, "Alias for min-duplicate-count")
+	fs.BoolVar(&f.JSON, "json", false, "Output in JSON format")
+
+	if len(args) > 3 {
+		if err := fs.Parse(reorderArgs(args[3:])); err != nil {
+			return f, err
+		}
+	}
+
+	if f.ID == "" && fs.NArg() > 0 {
+		f.ID = fs.Arg(0)
+	}
+
+	if f.ID == "" {
+		return f, fmt.Errorf("mem promote requires an observation ID (via argument or --id)")
+	}
+
+	return f, nil
+}
+
+func runMemPromote(ctx context.Context, svc *Services, args []string) {
+	flags, err := parseMemPromoteFlags(args)
+	if err != nil {
+		PrintError(err)
+		os.Exit(1)
+	}
+
+	res, err := svc.entrySvc.PromoteVaultMem(ctx, app.PromoteVaultMemInput{
+		ID:                flags.ID,
+		TargetType:        flags.Type,
+		Project:           flags.Project,
+		MinDuplicateCount: flags.MinDuplicateCount,
+	})
+	if err != nil {
+		PrintError(err)
+		os.Exit(1)
+	}
+
+	if flags.JSON {
+		b, _ := json.MarshalIndent(res, "", "  ")
+		fmt.Println(string(b))
+		return
+	}
+
+	if res.Skipped {
+		fmt.Printf("Observation %s not promoted: %s\n", res.SourceID, res.Reason)
+		return
+	}
+
+	fmt.Printf("Promoted observation %s to %s %q (%s)\n", res.SourceID, res.Type, res.Title, res.PromotedID)
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/quantum-6/skillvault/internal/app"
 	"github.com/quantum-6/skillvault/internal/domain"
@@ -118,26 +119,58 @@ func runEntryRestore(ctx context.Context, svc *Services, args []string) {
 }
 
 func runEntryRef(ctx context.Context, svc *Services, args []string) {
-	if len(args) < 4 {
-		PrintError(fmt.Errorf("usage: skillvault entry ref <subcommand> [args...]"))
+	subIdx := -1
+	for i, a := range args {
+		if a == "add" || a == "list" || a == "remove" {
+			subIdx = i
+			break
+		}
+	}
+	if subIdx == -1 {
+		PrintError(fmt.Errorf("usage: skillvault entry ref <add|list|remove> [args...]"))
 		os.Exit(1)
 	}
-	sub := args[3]
+
+	sub := args[subIdx]
+	subArgs := args[subIdx+1:]
+
 	switch sub {
 	case "add":
-		if len(args) < 7 {
-			PrintError(fmt.Errorf("usage: skillvault entry ref add <source_id> <target_id> <ref_type> [--label <txt>]"))
+		// Supports:
+		// skillvault entry ref add <source_id> <target_id> <ref_type> [--label <txt>]
+		// skillvault entry ref add <source_id> <target_id> --rel <ref_type> [--label <txt>]
+		// skillvault entry ref add <source_id> <target_id> --type <ref_type> [--label <txt>]
+		if len(subArgs) < 2 {
+			PrintError(fmt.Errorf("usage: skillvault entry ref add <source_id> <target_id> [<ref_type>] [--rel <type>] [--label <txt>]"))
 			os.Exit(1)
 		}
-		sourceID := args[4]
-		targetID := args[5]
-		refType := args[6]
+		sourceID := subArgs[0]
+		targetID := subArgs[1]
+		refType := ""
 		label := ""
-		for i, a := range args[7:] {
-			if a == "--label" && i+1 < len(args[7:]) {
-				label = args[7+i+1]
+
+		idx := 2
+		for idx < len(subArgs) {
+			a := subArgs[idx]
+			if (a == "--rel" || a == "--type") && idx+1 < len(subArgs) {
+				refType = subArgs[idx+1]
+				idx += 2
+			} else if a == "--label" && idx+1 < len(subArgs) {
+				label = subArgs[idx+1]
+				idx += 2
+			} else if !strings.HasPrefix(a, "-") && refType == "" {
+				refType = a
+				idx++
+			} else {
+				idx++
 			}
 		}
+
+		if refType == "" {
+			PrintError(fmt.Errorf("usage: skillvault entry ref add <source_id> <target_id> <ref_type> (or --rel <type>)"))
+			os.Exit(1)
+		}
+
 		link, err := svc.entryRefSvc.SaveRef(ctx, app.AddRefInput{
 			SourceID: sourceID,
 			TargetID: targetID,
@@ -156,18 +189,22 @@ func runEntryRef(ctx context.Context, svc *Services, args []string) {
 	case "list":
 		var srcPtr, tgtPtr, typePtr *string
 		includeArchived := false
-		for i, a := range args[4:] {
+		for i := 0; i < len(subArgs); i++ {
+			a := subArgs[i]
 			v := ""
-			if i+1 < len(args[4:]) {
-				v = args[4+i+1]
+			if i+1 < len(subArgs) {
+				v = subArgs[i+1]
 			}
 			switch a {
 			case "--source":
 				srcPtr = &v
+				i++
 			case "--target":
 				tgtPtr = &v
-			case "--type":
+				i++
+			case "--type", "--rel":
 				typePtr = &v
+				i++
 			case "--include-archived":
 				includeArchived = true
 			}
@@ -196,13 +233,13 @@ func runEntryRef(ctx context.Context, svc *Services, args []string) {
 		}
 
 	case "remove":
-		if len(args) < 7 {
+		if len(subArgs) < 3 {
 			PrintError(fmt.Errorf("usage: skillvault entry ref remove <source_id> <target_id> <ref_type>"))
 			os.Exit(1)
 		}
-		sourceID := args[4]
-		targetID := args[5]
-		refType := args[6]
+		sourceID := subArgs[0]
+		targetID := subArgs[1]
+		refType := subArgs[2]
 		if err := svc.entryRefSvc.RemoveRef(ctx, sourceID, targetID, refType); err != nil {
 			PrintError(err)
 			os.Exit(1)
