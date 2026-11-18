@@ -208,10 +208,13 @@ func (s *EntryService) SaveVaultMem(ctx context.Context, input VaultMemSaveInput
 		// Ensure project exists to allow frictionless memory capture
 		p, err := s.projectStore.Get(ctx, projName)
 		if err != nil {
+			// Auto-created on capture: store the canonical slug, not the
+			// raw name, so the project resolves by `--project <slug>`
+			// like one created with add-project.
 			_ = s.projectStore.Save(ctx, domain.Project{
 				ID:     projName,
 				Name:   projName,
-				Slug:   projName,
+				Slug:   slugify(projName),
 				Status: domain.StatusActive,
 			})
 			projectID = &projName
@@ -325,7 +328,7 @@ func (s *EntryService) SearchVaultMem(ctx context.Context, input VaultMemSearchI
 	if strings.TrimSpace(input.Project) != "" {
 		// Resolve ID or slug to the canonical project ID, like the other
 		// read paths; a raw slug would filter project_id to zero rows.
-		id, err := s.resolveProjectRef(ctx, input.Project)
+		id, err := resolveProjectRef(ctx, s.projectStore, input.Project)
 		if err != nil {
 			return nil, err
 		}

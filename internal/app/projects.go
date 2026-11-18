@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/quantum-6/skillvault/internal/db"
 	"github.com/quantum-6/skillvault/internal/domain"
@@ -39,9 +40,41 @@ func (s *ProjectService) SaveProject(ctx context.Context, input SaveProjectInput
 	if projID == "" {
 		projID = generateProjectID()
 	}
+
+	// The slug is the lookup key (`--project <id or slug>`) and the column
+	// is UNIQUE, so store the slugified name, never the raw name: before
+	// this fix `add-project --name "Verify Paths"` stored slug "Verify
+	// Paths" and `--project verify-paths` failed with "not found". Names
+	// that differ only in slug-insignificant characters ("Verify Paths"
+	// vs "Verify-Paths") collide on insert; resolve like entries do
+	// (slug, slug-2, ...), skipping our own row when an explicit ID
+	// re-saves an existing project.
+	slug := slugify(input.Name)
+	if slug == "" {
+		slug = "untitled"
+	}
+	candidate := slug
+	counter := 2
+	for {
+		existing, err := s.projectStore.Get(ctx, candidate)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				break
+			}
+			return nil, fmt.Errorf("check slug collision: %w", err)
+		}
+		if existing.ID == projID {
+			break
+		}
+		candidate = fmt.Sprintf("%s-%d", slug, counter)
+		counter++
+	}
+	slug = candidate
+
 	proj := domain.Project{
 		ID:          projID,
 		Name:        input.Name,
+		Slug:        slug,
 		Description: input.Description,
 		Status:      status,
 	}
