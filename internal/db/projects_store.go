@@ -40,7 +40,8 @@ func (s *sqliteProjectStore) Get(ctx context.Context, id string) (domain.Project
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, name, slug, description, status
 		FROM projects WHERE id = ? OR slug = ?
-	`, id, id).Scan(&p.ID, &p.Name, &p.Slug, &desc, &status)
+        ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END LIMIT 1
+	`, id, id, id).Scan(&p.ID, &p.Name, &p.Slug, &desc, &status)
 	if err == sql.ErrNoRows {
 		return p, fmt.Errorf("project %q not found", id)
 	}

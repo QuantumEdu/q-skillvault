@@ -69,8 +69,8 @@ func TestExportRoundTrip(t *testing.T) {
 		t.Fatalf("ExportAll failed: %v", err)
 	}
 
-	if exported.SchemaVersion != 3 {
-		t.Errorf("SchemaVersion = %d, want 3", exported.SchemaVersion)
+	if exported.SchemaVersion != 4 {
+		t.Errorf("SchemaVersion = %d, want 4", exported.SchemaVersion)
 	}
 	if exported.AppVersion != version.Display() {
 		t.Errorf("AppVersion = %q, want %q", exported.AppVersion, version.Display())

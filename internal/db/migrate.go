@@ -91,7 +91,13 @@ func RunMigrations(db *sql.DB) error {
 			return fmt.Errorf("failed to read migration %s: %w", m.name, err)
 		}
 
-		_, err = db.Exec(string(sqlBytes))
+		// New migrations run atomically on a single connection. Legacy scripts
+		// retain their existing PRAGMA behavior (some rebuild tables with FK off).
+		if m.version >= 14 {
+			err = applyAtomicMigration(db, string(sqlBytes))
+		} else {
+			_, err = db.Exec(string(sqlBytes))
+		}
 		if err != nil {
 			return fmt.Errorf("migration %s (v%d) failed: %w", m.name, m.version, err)
 		}
@@ -133,4 +139,16 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+func applyAtomicMigration(db *sql.DB, script string) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(script); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

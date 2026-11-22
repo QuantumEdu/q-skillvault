@@ -54,7 +54,11 @@ func (s *EntryVersionService) RestoreVersion(ctx context.Context, entryID string
 
 	// Save triggers archiveBeforeSave which captures the pre-restore
 	// state as a new version row.
-	if err := s.entryStore.Save(ctx, current.Entry, nil); err != nil {
+	tags := make([]string, 0, len(current.Tags))
+	for _, tag := range current.Tags {
+		tags = append(tags, tag.Name)
+	}
+	if err := s.entryStore.Save(ctx, current.Entry, tags); err != nil {
 		return fmt.Errorf("save restored entry: %w", err)
 	}
 

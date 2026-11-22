@@ -231,6 +231,20 @@ func applyPrefix(prefix string, data *domain.VaultData) {
 	if prefix == "" {
 		return
 	}
+	if data.MemoryQuality != nil {
+		quality := make(map[string]domain.MemoryQualityRecord, len(data.MemoryQuality))
+		for id, record := range data.MemoryQuality {
+			if record.SupersededBy != "" {
+				record.SupersededBy = prefix + record.SupersededBy
+			}
+			quality[prefix+id] = record
+		}
+		data.MemoryQuality = quality
+	}
+	for i := range data.EntryVersions {
+		data.EntryVersions[i].EntryID = prefix + data.EntryVersions[i].EntryID
+		data.EntryVersions[i].VersionID = prefix + data.EntryVersions[i].VersionID
+	}
 
 	for i := range data.Entries {
 		data.Entries[i].ID = prefix + data.Entries[i].ID

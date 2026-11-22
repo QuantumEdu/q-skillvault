@@ -100,8 +100,8 @@ func TestToolsListReturns24Tools(t *testing.T) {
 	default:
 		t.Fatalf("tools is not an array: %T", toolsRaw)
 	}
-	if toolCount != 39 {
-		t.Errorf("expected 39 tools, got %d", toolCount)
+	if toolCount != 41 {
+		t.Errorf("expected 41 tools, got %d", toolCount)
 	}
 }
 
@@ -328,6 +328,8 @@ func TestToolNamesAreCorrect(t *testing.T) {
 		"vault_mem_get",
 		"vault_mem_timeline",
 		"vault_mem_context",
+		"vault_session_checkpoint",
+		"vault_session_resume",
 	}
 
 	if len(names) != len(expected) {
@@ -1279,9 +1281,9 @@ func TestToolCountIncludesNewTools(t *testing.T) {
 	reg := NewToolRegistry(nil)
 	tools := reg.List()
 
-	// Should be 39 tools: 34 existing + 5 memory tools
-	if len(tools) != 39 {
-		t.Errorf("expected 39 tools, got %d", len(tools))
+	// 34 existing + 5 memory tools + 2 native continuity tools.
+	if len(tools) != 41 {
+		t.Errorf("expected 41 tools, got %d", len(tools))
 	}
 	names := make(map[string]bool)
 	for _, tool := range tools {
@@ -1826,11 +1828,11 @@ func TestVaultMemSearchMCP(t *testing.T) {
 	}
 
 	_, err = reg.Call(ctx, "vault_mem_save", map[string]interface{}{
-		"content":   "Configure pool size to 10 connections for SQLite",
-		"title":     "DB Pool Config",
-		"type":      "config",
-		"project":   "searchproj",
-		"topic":     "odd/tasks/db",
+		"content": "Configure pool size to 10 connections for SQLite",
+		"title":   "DB Pool Config",
+		"type":    "config",
+		"project": "searchproj",
+		"topic":   "odd/tasks/db",
 	})
 	if err != nil {
 		t.Fatalf("seed db mem failed: %v", err)
@@ -2040,8 +2042,8 @@ func TestCompatEngramMCP(t *testing.T) {
 
 	// Tool count should be 39 + 5 = 44
 	tools := reg.List()
-	if len(tools) != 44 {
-		t.Errorf("expected 44 tools with compatEngram enabled, got %d", len(tools))
+	if len(tools) != 46 {
+		t.Errorf("expected 46 tools with compatEngram enabled, got %d", len(tools))
 	}
 
 	// Verify mem_save
@@ -2116,4 +2118,3 @@ func TestCompatEngramMCP(t *testing.T) {
 		t.Errorf("expected context to contain 'compatproj', got: %s", ctxRes.Content[0].Text)
 	}
 }
-

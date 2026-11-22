@@ -1,4 +1,6 @@
-# MCP Server — 24 tools for AI agents
+# MCP Server — 41 native tools for AI agents
+
+With `--compat-engram`, five optional aliases bring the total to 46 tools.
 
 SkillVault runs as an MCP (Model Context Protocol) server over stdio JSON-RPC 2.0. This lets agents like Claude Code, OpenCode, or any MCP client read and write directly to your vault.
 
@@ -536,3 +538,13 @@ Restore an entry to a previous version by version number. The current state is p
 ### Cline / Continue
 
 Same configuration — point to the same binary with `args: ["mcp"]`.
+
+## Idempotent memory writes (v3.8.0)
+
+`vault_mem_save` and the optional Engram-compatible alias `mem_save` accept the same optional `operation_id` string. They also expose `pinned` (boolean), `review_after`, and `expires_at` (strings). Invalid types fail before writing. Existing requests remain valid.
+
+Use a stable operation ID for retries of the same effective request. A successful retry returns the original save result with `replayed: true`, without incrementing duplicates. Different content or hints with the same ID returns a tool error. Operation IDs are local to one vault, not globally synchronized identities; request project references must remain stable. The local journal is excluded from exports. Archived/deleted results cannot be replayed; superseded results acknowledge the original save. This extension does not imply full Engram behavioral parity or session ownership enforcement.
+
+## Native session continuity (v3.8.0)
+
+`vault_session_checkpoint` and `vault_session_resume` provide explicit project/session/producer-agent checkpoints. Both require `project`, `session_id`, and `agent_id`. Checkpoint additionally requires `operation_id` and `summary`; resume accepts an optional `max_chars` budget. These native tools do not change Engram aliases or install automatic capture. Full contracts and limits: [Native session continuity](session-continuity.md).

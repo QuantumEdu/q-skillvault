@@ -36,6 +36,22 @@ type VaultData struct {
 	WorkflowRunSteps []WorkflowRunStep `json:"workflow_run_steps"`
 	Artifacts        []Artifact        `json:"artifacts"`
 	EntryLinks       []EntryLink       `json:"entry_links"`
+	// Schema v4 preserves memory mechanics independently of the public Entry DTO.
+	// An omitted map in a legacy snapshot must not reset destination quality.
+	MemoryQuality map[string]MemoryQualityRecord `json:"memory_quality,omitempty"`
+	EntryVersions []EntryVersion                 `json:"entry_versions,omitempty"`
+}
+
+// MemoryQualityRecord is the portable state of one memory, keyed by entry ID.
+type MemoryQualityRecord struct {
+	NormalizedHash string `json:"normalized_hash"`
+	TopicKey       string `json:"topic_key"`
+	RevisionCount  int    `json:"revision_count"`
+	DuplicateCount int    `json:"duplicate_count"`
+	SupersededBy   string `json:"superseded_by,omitempty"`
+	Pinned         bool   `json:"pinned"`
+	ReviewAfter    string `json:"review_after,omitempty"`
+	ExpiresAt      string `json:"expires_at,omitempty"`
 }
 
 // VaultPackExport wraps a VaultExport with pack metadata for sharing

@@ -16,6 +16,8 @@ Store, search, and retrieve prompts, skills, workflows, decisions, project memor
 **Author:** Gabriel Magallon Sanchez - Qu@antum  
 **Repository:** [https://github.com/QuantumEdu/q-skillvault](https://github.com/QuantumEdu/q-skillvault)  
 **Codename:** Qu@ntum  
+**Version:** v3.8.0
+
 **Status:** v3 — Workflow bridge + LifeOS taxonomy + workflow analytics + entry versioning + skill pack export + issue-to-PR factory (`line`)  
 **Versioning:** Semantic Versioning `MAJOR.MINOR.PATCH` starting at `v3.0.0` — MINOR bumps per merged feature PR, PATCH per merged fix PR, MAJOR only on breaking changes. Single source of truth: `internal/version/version.go`.  
 **Binary size:** ~7 MB  
@@ -25,6 +27,15 @@ Store, search, and retrieve prompts, skills, workflows, decisions, project memor
 
 ---
 
+## v3.8.0: standalone memory foundations
+
+- Atomic memory saves and optional retry identities (`mem save --operation-id`, MCP `operation_id`).
+- Native `mem checkpoint` / `mem resume`, scoped to an explicit project, session, and producer agent; no Engram runtime dependency.
+- Portable export v4 preserves memory quality, revision history, supersession, timestamps, and inactive graph edges.
+- SQLite migrations 014–015 reconcile semantic relations and add local retry bookkeeping. Back up your vault before upgrading; normal CLI/MCP startup applies pending migrations.
+
+Automatic capture/hooks, full Engram contract parity, advanced hybrid retrieval, and lifecycle enforcement remain roadmap work. See [session continuity](docs/session-continuity.md) and [changelog](CHANGELOG.md) for contracts and limits.
+
 ## Docs
 
 | Guide | Description |
@@ -32,6 +43,7 @@ Store, search, and retrieve prompts, skills, workflows, decisions, project memor
 | [`docs/quickstart.md`](docs/quickstart.md) | Install, init, and first 6 steps in 5 minutes |
 | [`docs/commands.md`](docs/commands.md) | Full CLI reference — all commands with flags |
 | [`docs/vars.md`](docs/vars.md) | Variable detection, frontmatter, and injection guide |
+| [`docs/session-continuity.md`](docs/session-continuity.md) | Native checkpoint/resume identity, retries, bounded context, and portability |
 | [`docs/mcp.md`](docs/mcp.md) | MCP server setup for Claude Code / OpenCode |
 | [`docs/tutorial.md`](docs/tutorial.md) | Real-world workflow: project → skills → context → session |
 | [`docs/architecture.md`](docs/architecture.md) | Clean Architecture deep-dive, data flows, design decisions |

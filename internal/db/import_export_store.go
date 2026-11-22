@@ -11,9 +11,34 @@ import (
 	"github.com/quantum-6/skillvault/internal/version"
 )
 
-const exportSchemaVersion = 3
+const exportSchemaVersion = 4
 
+// ExportAll reads every entity from the same SQLite snapshot.
 func (s *sqliteImportExportStore) ExportAll(ctx context.Context) (domain.VaultExport, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.VaultExport{}, fmt.Errorf("export snapshot: %w", err)
+	}
+	defer tx.Rollback()
+	view := &sqliteImportExportStore{db: s.db, snapshot: tx}
+	result, err := view.exportAll(ctx)
+	if err != nil {
+		return domain.VaultExport{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.VaultExport{}, err
+	}
+	return result, nil
+}
+
+func (s *sqliteImportExportStore) query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	if s.snapshot != nil {
+		return s.snapshot.QueryContext(ctx, query, args...)
+	}
+	return s.db.QueryContext(ctx, query, args...)
+}
+
+func (s *sqliteImportExportStore) exportAll(ctx context.Context) (domain.VaultExport, error) {
 	export := domain.VaultExport{
 		SchemaVersion: exportSchemaVersion,
 		AppVersion:    version.Display(),
@@ -71,17 +96,28 @@ func (s *sqliteImportExportStore) ExportAll(ctx context.Context) (domain.VaultEx
 		return export, fmt.Errorf("export run_steps: %w", err)
 	}
 
+	export.Data.MemoryQuality, err = s.exportMemoryQuality(ctx)
+	if err != nil {
+		return export, err
+	}
+	export.Data.EntryVersions, err = s.exportEntryVersions(ctx)
+	if err != nil {
+		return export, err
+	}
 	return export, nil
 }
 
 func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.VaultExport) error {
-	if data.SchemaVersion == 0 {
+	if data.SchemaVersion <= 0 {
 		return fmt.Errorf("import rejected: missing schema_version")
 	}
 	if data.SchemaVersion > exportSchemaVersion {
 		return fmt.Errorf("import rejected: schema_version %d is newer than supported (max %d)", data.SchemaVersion, exportSchemaVersion)
 	}
 
+	if err := validateMemorySnapshot(data); err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -177,8 +213,8 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 			artifactID = *e.ArtifactID
 		}
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO entries (id, name, title, slug, type, content, summary, body_optional, purpose, status, project_id, artifact_id, external_ref, tags_denorm, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', CURRENT_TIMESTAMP)
+			`INSERT INTO entries (id, name, title, slug, type, content, summary, body_optional, purpose, status, project_id, artifact_id, external_ref, tags_denorm, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
 			 ON CONFLICT(id) DO UPDATE SET
 			 name=excluded.name, title=excluded.title, slug=excluded.slug,
 			 type=excluded.type, content=excluded.content,
@@ -186,11 +222,15 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 			 purpose=excluded.purpose,
 			 status=excluded.status, project_id=excluded.project_id,
 			 artifact_id=excluded.artifact_id, external_ref=excluded.external_ref,
-			 updated_at=CURRENT_TIMESTAMP`,
-			e.ID, e.Title, e.Title, e.Slug, string(e.Type), e.BodyOptional, e.Summary, e.BodyOptional, string(e.Purpose), string(e.Status), projectID, artifactID, e.ExternalRef)
+			 created_at=COALESCE(?, entries.created_at), updated_at=COALESCE(?, entries.updated_at)`,
+			e.ID, e.Title, e.Title, e.Slug, string(e.Type), e.BodyOptional, e.Summary, e.BodyOptional, string(e.Purpose), string(e.Status), projectID, artifactID, e.ExternalRef, portableTime(e.CreatedAt), portableTime(e.UpdatedAt), portableTime(e.CreatedAt), portableTime(e.UpdatedAt))
 		if err != nil {
 			return fmt.Errorf("import entry %s: %w", e.ID, err)
 		}
+	}
+
+	if err := importMemoryState(ctx, tx, data); err != nil {
+		return err
 	}
 
 	for _, a := range data.Data.Artifacts {
@@ -218,6 +258,13 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 		}
 	}
 
+	if data.SchemaVersion >= 4 {
+		for _, entry := range data.Data.Entries {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM entry_tags WHERE entry_id=?", entry.ID); err != nil {
+				return err
+			}
+		}
+	}
 	for _, et := range data.Data.EntryTags {
 		_, err := tx.ExecContext(ctx,
 			"INSERT OR REPLACE INTO entry_tags (entry_id, tag) VALUES (?, ?)",
@@ -298,28 +345,34 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 	}
 
 	for _, el := range data.Data.EntryLinks {
-		active := 1
-		_ = active // unused; imported entry_links are active by default
+		active := true
+		if data.SchemaVersion >= 4 {
+			active = el.Active
+		}
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO entry_links (from_entry_id, to_entry_id, relation_type, label, active)
-			 VALUES (?, ?, ?, ?, 1)
+			`INSERT INTO entry_links (from_entry_id, to_entry_id, relation_type, label, active, created_at)
+             VALUES (?, ?, ?, ?, ?, COALESCE(?,CURRENT_TIMESTAMP))
 			 ON CONFLICT(from_entry_id, to_entry_id, relation_type) DO UPDATE SET
-			 label=excluded.label, active=1`,
-			el.FromEntryID, el.ToEntryID, string(el.RelationType), el.Label)
+			 label=excluded.label, active=excluded.active, created_at=COALESCE(?,entry_links.created_at)`,
+			el.FromEntryID, el.ToEntryID, string(el.RelationType), el.Label, active, portableTime(el.CreatedAt), portableTime(el.CreatedAt))
 		if err != nil {
 			return fmt.Errorf("import entry_link %s/%s: %w", el.FromEntryID, el.ToEntryID, err)
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, "INSERT INTO entries_fts(entries_fts) VALUES('rebuild')"); err != nil {
-		return fmt.Errorf("rebuild fts after import: %w", err)
+	if _, err := tx.ExecContext(ctx, `UPDATE entries SET tags_denorm = COALESCE(
+        (SELECT group_concat(tag, ' ') FROM (SELECT tag FROM entry_tags WHERE entry_id=entries.id ORDER BY tag)), '')`); err != nil {
+		return fmt.Errorf("rebuild imported tag projection: %w", err)
+	}
+	if err := rebuildFTSInTransaction(ctx, tx); err != nil {
+		return err
 	}
 
 	return tx.Commit()
 }
 
 func (s *sqliteImportExportStore) exportProjects(ctx context.Context) ([]domain.Project, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, name, COALESCE(slug,''), COALESCE(description,''), COALESCE(status,'active') FROM projects ORDER BY id")
+	rows, err := s.query(ctx, "SELECT id, name, COALESCE(slug,''), COALESCE(description,''), COALESCE(status,'active') FROM projects ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +381,7 @@ func (s *sqliteImportExportStore) exportProjects(ctx context.Context) ([]domain.
 }
 
 func (s *sqliteImportExportStore) exportEntries(ctx context.Context) ([]domain.Entry, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(title,''), COALESCE(slug,''), type, purpose, project_id, COALESCE(summary,''), COALESCE(body_optional,''), COALESCE(status,'active'), artifact_id, COALESCE(external_ref,'') FROM entries ORDER BY id`)
+	rows, err := s.query(ctx, `SELECT id, COALESCE(title,''), COALESCE(slug,''), type, purpose, project_id, COALESCE(summary,''), COALESCE(body_optional,''), COALESCE(status,'active'), artifact_id, COALESCE(external_ref,''), COALESCE(created_at,''), COALESCE(updated_at,'') FROM entries ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -337,8 +390,21 @@ func (s *sqliteImportExportStore) exportEntries(ctx context.Context) ([]domain.E
 	for rows.Next() {
 		var e domain.Entry
 		var projID, artID, summary, body, status sql.NullString
-		if err := rows.Scan(&e.ID, &e.Title, &e.Slug, &e.Type, &e.Purpose, &projID, &summary, &body, &status, &artID, &e.ExternalRef); err != nil {
+		var createdAt, updatedAt string
+		if err := rows.Scan(&e.ID, &e.Title, &e.Slug, &e.Type, &e.Purpose, &projID, &summary, &body, &status, &artID, &e.ExternalRef, &createdAt, &updatedAt); err != nil {
 			return nil, err
+		}
+		if createdAt != "" {
+			e.CreatedAt, err = parseSQLiteTime(createdAt)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if updatedAt != "" {
+			e.UpdatedAt, err = parseSQLiteTime(updatedAt)
+			if err != nil {
+				return nil, err
+			}
 		}
 		e.Status = domain.Status(status.String)
 		if projID.Valid {
@@ -355,11 +421,11 @@ func (s *sqliteImportExportStore) exportEntries(ctx context.Context) ([]domain.E
 		}
 		results = append(results, e)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportEntryTags(ctx context.Context) ([]domain.EntryTag, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT entry_id, tag FROM entry_tags ORDER BY entry_id, tag")
+	rows, err := s.query(ctx, "SELECT entry_id, tag FROM entry_tags ORDER BY entry_id, tag")
 	if err != nil {
 		return nil, err
 	}
@@ -372,11 +438,11 @@ func (s *sqliteImportExportStore) exportEntryTags(ctx context.Context) ([]domain
 		}
 		results = append(results, et)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportTags(ctx context.Context) ([]domain.Tag, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, name, slug FROM tags ORDER BY id")
+	rows, err := s.query(ctx, "SELECT id, name, slug FROM tags ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -389,11 +455,11 @@ func (s *sqliteImportExportStore) exportTags(ctx context.Context) ([]domain.Tag,
 		}
 		results = append(results, t)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportSeries(ctx context.Context) ([]domain.Series, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, COALESCE(slug,''), COALESCE(description,''), COALESCE(status,'active') FROM series ORDER BY id`)
+	rows, err := s.query(ctx, `SELECT id, name, COALESCE(slug,''), COALESCE(description,''), COALESCE(status,'active') FROM series ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -408,11 +474,11 @@ func (s *sqliteImportExportStore) exportSeries(ctx context.Context) ([]domain.Se
 		se.Status = domain.Status(status)
 		results = append(results, se)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportSeriesEntries(ctx context.Context) ([]domain.SeriesEntry, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT series_id, entry_id, COALESCE(order_index,0) FROM series_entries ORDER BY series_id, order_index`)
+	rows, err := s.query(ctx, `SELECT series_id, entry_id, COALESCE(order_index,0) FROM series_entries ORDER BY series_id, order_index`)
 	if err != nil {
 		return nil, err
 	}
@@ -425,11 +491,11 @@ func (s *sqliteImportExportStore) exportSeriesEntries(ctx context.Context) ([]do
 		}
 		results = append(results, se)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportWorkflows(ctx context.Context) ([]domain.Workflow, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, COALESCE(slug,''), COALESCE(description,''), COALESCE(status,'active') FROM workflows ORDER BY id`)
+	rows, err := s.query(ctx, `SELECT id, name, COALESCE(slug,''), COALESCE(description,''), COALESCE(status,'active') FROM workflows ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -448,11 +514,11 @@ func (s *sqliteImportExportStore) exportWorkflows(ctx context.Context) ([]domain
 		}
 		results = append(results, w)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportWorkflowSteps(ctx context.Context) ([]domain.WorkflowStep, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, workflow_id, order_index, COALESCE(title,''), COALESCE(instruction,''), required, COALESCE(expected_output,''), COALESCE(entry_slug,'') FROM workflow_steps ORDER BY workflow_id, order_index`)
+	rows, err := s.query(ctx, `SELECT id, workflow_id, order_index, COALESCE(title,''), COALESCE(instruction,''), required, COALESCE(expected_output,''), COALESCE(entry_slug,'') FROM workflow_steps ORDER BY workflow_id, order_index`)
 	if err != nil {
 		return nil, err
 	}
@@ -469,11 +535,11 @@ func (s *sqliteImportExportStore) exportWorkflowSteps(ctx context.Context) ([]do
 		ws.Required = required == 1
 		results = append(results, ws)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportArtifacts(ctx context.Context) ([]domain.Artifact, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, title, COALESCE(slug,''), type, COALESCE(file_path,''), COALESCE(mime_type,''), COALESCE(summary,''), COALESCE(content_hash,''), COALESCE(size_bytes,0), project_id, source_entry_id FROM artifacts ORDER BY id`)
+	rows, err := s.query(ctx, `SELECT id, title, COALESCE(slug,''), type, COALESCE(file_path,''), COALESCE(mime_type,''), COALESCE(summary,''), COALESCE(content_hash,''), COALESCE(size_bytes,0), project_id, source_entry_id FROM artifacts ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -496,7 +562,7 @@ func (s *sqliteImportExportStore) exportArtifacts(ctx context.Context) ([]domain
 		}
 		results = append(results, a)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func scanProjects(rows *sql.Rows) ([]domain.Project, error) {
@@ -510,13 +576,13 @@ func scanProjects(rows *sql.Rows) ([]domain.Project, error) {
 		p.Status = domain.Status(status)
 		results = append(results, p)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 var _ ImportExportStore = (*sqliteImportExportStore)(nil)
 
 func (s *sqliteImportExportStore) exportRuns(ctx context.Context) ([]domain.WorkflowRun, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, workflow_id, COALESCE(input,''), COALESCE(output,''), COALESCE(status,'pending'), started_at, finished_at FROM runs ORDER BY id`)
+	rows, err := s.query(ctx, `SELECT id, workflow_id, COALESCE(input,''), COALESCE(output,''), COALESCE(status,'pending'), started_at, finished_at FROM runs ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -533,11 +599,11 @@ func (s *sqliteImportExportStore) exportRuns(ctx context.Context) ([]domain.Work
 		}
 		results = append(results, r)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportRunSteps(ctx context.Context) ([]domain.WorkflowRunStep, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, run_id, step_id, entry_id, COALESCE(input,''), COALESCE(output,''), COALESCE(status,'pending'), started_at, finished_at FROM run_steps ORDER BY id`)
+	rows, err := s.query(ctx, `SELECT id, run_id, step_id, entry_id, COALESCE(input,''), COALESCE(output,''), COALESCE(status,'pending'), started_at, finished_at FROM run_steps ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -554,11 +620,11 @@ func (s *sqliteImportExportStore) exportRunSteps(ctx context.Context) ([]domain.
 		}
 		results = append(results, rs)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 func (s *sqliteImportExportStore) exportEntryLinks(ctx context.Context) ([]domain.EntryLink, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT from_entry_id, to_entry_id, relation_type, COALESCE(label,'') FROM entry_links WHERE active = 1 ORDER BY from_entry_id, to_entry_id")
+	rows, err := s.query(ctx, "SELECT from_entry_id, to_entry_id, relation_type, COALESCE(label,''), active, COALESCE(created_at,'') FROM entry_links ORDER BY from_entry_id, to_entry_id, relation_type")
 	if err != nil {
 		return nil, err
 	}
@@ -566,15 +632,20 @@ func (s *sqliteImportExportStore) exportEntryLinks(ctx context.Context) ([]domai
 	var results []domain.EntryLink
 	for rows.Next() {
 		var el domain.EntryLink
-		var rt string
-		if err := rows.Scan(&el.FromEntryID, &el.ToEntryID, &rt, &el.Label); err != nil {
+		var rt, createdAt string
+		if err := rows.Scan(&el.FromEntryID, &el.ToEntryID, &rt, &el.Label, &el.Active, &createdAt); err != nil {
 			return nil, err
 		}
 		el.RelationType = domain.RelationType(rt)
-		el.Active = true
+		if createdAt != "" {
+			el.CreatedAt, err = parseSQLiteTime(createdAt)
+			if err != nil {
+				return nil, err
+			}
+		}
 		results = append(results, el)
 	}
-	return results, nil
+	return results, rows.Err()
 }
 
 var _ = json.Marshal

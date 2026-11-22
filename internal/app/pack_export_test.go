@@ -108,6 +108,13 @@ func TestPackImportWithPrefix(t *testing.T) {
 		t.Fatalf("Save entry: %v", err)
 	}
 
+	e.BodyOptional = "Updated body for history"
+	if err := store.Entries.Save(ctx, e, []string{"mem"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Entries.SetMemoryHints(ctx, e.ID, db.MemoryHints{Pinned: true, NormalizedHash: "source-hash", TopicKey: "storage/sqlite"}); err != nil {
+		t.Fatal(err)
+	}
 	// Export.
 	packPath := t.TempDir() + "/pref.svpack"
 	if err := exportSvc.ExportPack(ctx, ExportPackInput{
@@ -141,6 +148,17 @@ func TestPackImportWithPrefix(t *testing.T) {
 		t.Errorf("title = %q, want 'Prefix Entry'", result.Entry.Title)
 	}
 
+	exported, err := store2.ImportExport.ExportAll(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quality, ok := exported.Data.MemoryQuality["ns/pref-entry"]
+	if !ok || !quality.Pinned || quality.NormalizedHash != "source-hash" {
+		t.Fatal("pack lost memory quality")
+	}
+	if len(exported.Data.EntryVersions) != 1 || exported.Data.EntryVersions[0].EntryID != "ns/pref-entry" || !strings.HasPrefix(exported.Data.EntryVersions[0].VersionID, "ns/") {
+		t.Fatalf("pack lost namespaced history: %+v", exported.Data.EntryVersions)
+	}
 	// The original slug is unchanged, so Get by unprefixed string still
 	// works (it matches the slug). Verify the ID is correctly prefixed.
 	if result.Entry.ID != "ns/pref-entry" {

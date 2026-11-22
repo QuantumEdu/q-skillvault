@@ -85,11 +85,67 @@ $ sqlite3 ~/.skillvault/vault.db "
     FROM entries"
 ```
 
-## What this does not do yet
+## Portable memory (export schema v4)
 
-- **Relations.** `entry_links` exists with a schema and a store, and still holds
-  zero rows. Memory that cannot relate facts is a better index, not a better mind.
-- **Promotion.** A fact repeated in several sessions is not yet promoted or merged.
-- **Migration.** The Engram corpus has not been imported. Supersession had to exist
-  first; importing into a store that cannot resolve duplicates would copy the
-  problem instead of replacing it.
+SkillVault owns its memory independently of any agent or external memory backend.
+Engram compatibility/import is optional; neither Engram nor OMP is required for
+SQLite persistence, memory retrieval, history, or export.
+
+Schema v4 exports memory mechanics and lifecycle state alongside entries, includes
+content versions, entry timestamps and inactive graph edges, and reads all tables
+from one SQLite snapshot. A replay-safe import preserves version IDs and refuses
+conflicting history. Source hashes, topics and supersession survive a round trip.
+The restored entry is searchable by content and tags immediately after commit.
+Pack prefixes also apply to quality ownership, supersession targets and versions.
+Content restoration keeps the entry's current tags.
+
+The format is explicitly versioned: earlier binaries reject v4; this writer's
+reader still accepts v1–v3. Those older snapshots lack quality/history, so their
+absence preserves existing destination quality rather than resetting it. A v4
+import replaces tags for its entries; legacy imports keep additive tag semantics.
+Artifact references are included; artifact file bytes and derived vector indexes
+are not. Back up artifact files separately. This is not a bidirectional sync or
+an automatic conflict resolver for competing edits.
+
+## Implemented versus pending
+
+- **Relations:** the typed graph and store already exist. Migration 014 reconciles
+  SQLite's CHECK with the public types, including `contradicts` and `cites`, without
+  discarding old/inactive edges. New migrations execute transactionally; none are
+  applied to a user's vault merely by running this change's temporary-DB tests.
+- **Promotion:** `mem promote` already creates decision/skill entries with a
+  duplicate-count gate and provenance tags. Evidence-based approval, idempotent
+  promotion and formal provenance edges remain pending.
+- **Engram import:** `sync-engram` already imports observations and selected quality
+  fields. Source namespacing, incremental updates and session/prompt/relation
+  fidelity remain pending. It is not necessary for standalone SkillVault memory.
+- **Lifecycle:** dates and pin state are portable; uniform expiry enforcement and
+  `mem review` remain pending. Persisting a field is not enforcing its policy.
+
+## Evolution toward independent memory
+
+1. **Current slice:** faithful portable memory, tag-preserving restoration and
+   persistent semantic relation types, verified on synthetic temporary databases.
+2. **Next P0:** atomic memory writes, operation IDs, consistent redaction and
+   source identity; no dependency on Engram for these guarantees.
+3. **P0 continuity:** explicit session/agent ownership, reliable checkpoints and an
+   optional OMP adapter. Keep existing agents and memory systems operational.
+4. **P1 recovery:** one context compiler, correct temporal ordering and uniform
+   eligibility filters; optional multilingual hybrid retrieval with FTS fallback.
+5. **P1/P2 quality:** review, validated promotion and memory-specific telemetry,
+   evaluated with a reproducible bilingual benchmark before enabling automation.
+
+These steps extend existing services instead of introducing another authoritative
+memory database. Each step needs regression tests and explicit compatibility.
+
+## Atomic saves and retry identity (v3.8.0)
+
+Memory saves now persist projects, entries, tags/FTS, deduplication counters, supersession and initial lifecycle hints in one transaction. Independent SQLite connections serialize the identity checks before writing. A failure in metadata or retry journaling rolls back the save.
+
+Optional `operation_id` distinguishes a transport retry from learning the same content again: a replay does not increment `duplicate_count`; a new operation does. This is local retry bookkeeping, excluded from portable memory snapshots, not evidence of truth or agent/session ownership. Existing content normalization remains unchanged; new title-only observations hash their title separately to avoid empty-content collisions. Existing rows are not rehashed.
+
+Lifecycle hints remain metadata; this phase does not add automatic expiry filtering, contradiction resolution, pinned-memory policy, or full Engram contract parity. Optional vector indexing occurs after the authoritative SQLite commit.
+
+## Explicit session continuity (v3.8.0)
+
+Native checkpoints reuse handoff entries, identity digest tags, and existing revision/supersession metadata. Each stream is scoped by project, session, and producer agent. Recovery is read-only, bounded, and never broadens an identity miss. This provides explicit persistence/recovery; it does not automatically extract decisions or establish their truth. See [Native session continuity](session-continuity.md).
