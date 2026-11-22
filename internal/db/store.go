@@ -200,6 +200,9 @@ type sqliteTagStore struct{ db *sql.DB }
 type sqliteEntryLinkStore struct{ db *sql.DB }
 type sqliteProjectStore struct{ db *sql.DB }
 type sqliteSearchStore struct{ db *sql.DB }
-type sqliteImportExportStore struct{ db *sql.DB }
+type sqliteImportExportStore struct {
+	db       *sql.DB
+	snapshot *sql.Tx
+}
 
 var _ = sql.NullString{}

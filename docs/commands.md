@@ -628,6 +628,15 @@ echo "Discovered that FTS5 interprets unquoted hyphens as operators." | skillvau
 | `--type` | ❌ | Observation type: `decision`, `architecture`, `bugfix`, `pattern`, `discovery`, `config`, `workflow`, `prompt` (default: `decision`) |
 | `--project` | ❌ | Project slug or name |
 | `--topic` | ❌ | Topic key (e.g. `architecture/db`) for grouping |
+| `--operation-id` | ❌ | Stable local retry identity for this logical save |
+
+Use `--operation-id <stable-request-id>` when retrying one logical save. IDs are scoped to the local vault and must be at most 256 bytes, without surrounding whitespace or control characters. Repeat the same effective request, including project reference, tags and lifecycle hints. The retry returns the original acknowledgement (`replayed: true` in JSON) without incrementing `duplicate_count`; reusing an ID for a different request fails. A new observation/relearning needs a new ID. Omitting the flag preserves duplicate-count behavior.
+
+```bash
+skillvault mem save "Chose SQLite WAL" "Enables concurrent readers." --project myapp --operation-id agent-run-42-decision-1
+```
+
+The retry journal is local operational state and is not included in portable exports or synchronization. It provides no cross-vault retry guarantee. Archived/deleted targets reject replay; superseded targets replay the original acknowledgement (use `mem get` for current state). Physical deletion erases the journal's cached content. Optional vector indexing remains derived work after commit.
 
 ### `mem search`
 Search observations using SQLite FTS5 (queries with hyphens or symbols are automatically sanitized).
@@ -772,6 +781,19 @@ skillvault export --output export.json   # explicit
 | `--pack` | ❌ | Export as a skill pack instead of a full vault |
 
 Includes all entry types, projects, workflows, series, tags, entry_links, and artifact metadata.
+
+Exports now use schema v4: memory quality/lifecycle, supersession, content history,
+entry timestamps, and graph edge activity are preserved. The exporter reads one
+SQLite snapshot; imports commit content and the rebuilt search index together.
+Readers from previous versions reject schema v4 explicitly. This version still
+reads v1–v3 exports, which cannot recover metadata/history their original writer
+omitted. Missing legacy metadata does not reset existing destination quality.
+A v4 snapshot replaces tags of imported entries; older snapshots retain their
+legacy additive tag behavior. Conflicting immutable history aborts the import.
+
+The JSON contains artifact references, not the artifact file bytes. Keep the
+`objects/` directory in a complete backup. Vector indexes are derived data and
+must be rebuilt separately when needed; they are not part of this snapshot.
 
 ### Skill pack export
 
@@ -1006,3 +1028,9 @@ skillvault mcp audit --all --format json
 | `--config` | ❌ | Path to a specific MCP JSON configuration file |
 | `--format` | ❌ | Output format: `text` (default) or `json` |
 
+
+## `mem checkpoint` / `mem resume` (v3.8.0)
+
+Save and recover explicit project/session/producer-agent checkpoints without Engram. Checkpoint requires `--project`, `--session-id`, `--agent-id`, `--operation-id`, and summary (`--summary` or stdin). Optional repeatable `--decision` / `--pending`, `--event`, and `--json`. Resume requires the three identity flags; optional `--max-chars` (default 12000, range 1–64000) and `--json`. No cross-project/session/agent fallback.
+
+See [Native session continuity](session-continuity.md) for examples, retry semantics, portability, and limits. These commands do not install hooks or change agent compaction.

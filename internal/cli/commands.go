@@ -38,7 +38,7 @@ func ParseCommand(args []string) (string, error) {
 		return sub, nil
 	case "mem":
 		if len(args) < 3 {
-			return "", fmt.Errorf("mem requires a subcommand (save, search, get, timeline, context, promote)")
+			return "", fmt.Errorf("mem requires a subcommand (save, search, get, timeline, context, promote, checkpoint, resume)")
 		}
 		sub2 := args[2]
 		switch sub2 {
@@ -52,10 +52,12 @@ func ParseCommand(args []string) (string, error) {
 			return "mem-timeline", nil
 		case "context":
 			return "mem-context", nil
+		case "checkpoint", "resume":
+			return "mem-" + sub2, nil
 		case "promote":
 			return "mem-promote", nil
 		default:
-			return "", fmt.Errorf("unknown mem subcommand: %s (use save, search, get, timeline, context, promote)", sub2)
+			return "", fmt.Errorf("unknown mem subcommand: %s (use save, search, get, timeline, context, promote, checkpoint, resume)", sub2)
 		}
 	case "pending":
 		if len(args) < 3 {
@@ -1177,7 +1179,8 @@ type AuditFlags struct {
 
 // ParseAuditFlags parses audit-specific flags from args.
 // Usage:
-//   skillvault audit [target] [--pack <path>] [--format text|json] [--fail-on <severity>]
+//
+//	skillvault audit [target] [--pack <path>] [--format text|json] [--fail-on <severity>]
 func ParseAuditFlags(args []string) (*AuditFlags, error) {
 	flags := &AuditFlags{
 		Format: "text",
@@ -1226,7 +1229,8 @@ type MCPAuditFlags struct {
 
 // ParseMCPAuditFlags parses mcp audit specific flags from args.
 // Usage:
-//   skillvault mcp audit [--all] [--config <path>] [--format text|json]
+//
+//	skillvault mcp audit [--all] [--config <path>] [--format text|json]
 func ParseMCPAuditFlags(args []string) (*MCPAuditFlags, error) {
 	flags := &MCPAuditFlags{
 		Format: "text",
@@ -1255,5 +1259,3 @@ func ParseMCPAuditFlags(args []string) (*MCPAuditFlags, error) {
 
 	return flags, nil
 }
-
-

@@ -20,23 +20,23 @@ type ToolRegistry struct {
 	tools   []Tool
 	handler ToolHandler
 
-	entrySvc          *app.EntryService
-	entryVersionSvc   *app.EntryVersionService
-	entryRefSvc       *app.EntryRefService
-	compareSvc        *app.VectorService
-	artifactSvc       *app.ArtifactService
-	contextSvc        *app.ContextService
-	seriesSvc         *app.SeriesService
-	workflowSvc       *app.WorkflowService
-	workflowRunSvc    *app.WorkflowRunService
-	sessionSvc        *app.SessionService
-	projectSvc        *app.ProjectService
-	saveResultSvc     *app.SavePromptResultService
-	statsSvc          *app.StatsService
-	linkSvc           *app.LinkService
-	instructionSvc    *app.InstructionService
-	vaultMemSvc       *app.VaultMemService
-	compatEngram      bool
+	entrySvc        *app.EntryService
+	entryVersionSvc *app.EntryVersionService
+	entryRefSvc     *app.EntryRefService
+	compareSvc      *app.VectorService
+	artifactSvc     *app.ArtifactService
+	contextSvc      *app.ContextService
+	seriesSvc       *app.SeriesService
+	workflowSvc     *app.WorkflowService
+	workflowRunSvc  *app.WorkflowRunService
+	sessionSvc      *app.SessionService
+	projectSvc      *app.ProjectService
+	saveResultSvc   *app.SavePromptResultService
+	statsSvc        *app.StatsService
+	linkSvc         *app.LinkService
+	instructionSvc  *app.InstructionService
+	vaultMemSvc     *app.VaultMemService
+	compatEngram    bool
 }
 
 // NewToolRegistry creates a registry with a generic handler (for testing).
@@ -117,14 +117,18 @@ func (r *ToolRegistry) registerCompatEngramTools() {
 	}
 	compat := []Tool{
 		{Name: "mem_save", Description: "Save an episodic observation memory (Engram compatibility alias)", InputSchema: schemaObj(map[string]interface{}{
-			"content":   map[string]interface{}{"type": "string", "description": "Observation content (required)"},
-			"title":     map[string]interface{}{"type": "string", "description": "Short title (optional)"},
-			"type":      map[string]interface{}{"type": "string", "description": "Observation type: decision|architecture|workflow|bugfix|discovery|pattern|config|feedback"},
-			"project":   map[string]interface{}{"type": "string", "description": "Project name (optional)"},
-			"topic_key": map[string]interface{}{"type": "string", "description": "Topic key (optional)"},
-			"topic":     map[string]interface{}{"type": "string", "description": "Alias for topic_key"},
-			"scope":     map[string]interface{}{"type": "string", "description": "Scope: project|global|session"},
-			"tags":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+			"operation_id": map[string]interface{}{"type": "string", "description": "Optional stable retry identity; the same ID must have the same request"},
+			"pinned":       map[string]interface{}{"type": "boolean", "description": "Persist the memory pin hint"},
+			"review_after": map[string]interface{}{"type": "string", "description": "Persist the review date hint"},
+			"expires_at":   map[string]interface{}{"type": "string", "description": "Persist the expiration date hint"},
+			"content":      map[string]interface{}{"type": "string", "description": "Observation content (required)"},
+			"title":        map[string]interface{}{"type": "string", "description": "Short title (optional)"},
+			"type":         map[string]interface{}{"type": "string", "description": "Observation type: decision|architecture|workflow|bugfix|discovery|pattern|config|feedback"},
+			"project":      map[string]interface{}{"type": "string", "description": "Project name (optional)"},
+			"topic_key":    map[string]interface{}{"type": "string", "description": "Topic key (optional)"},
+			"topic":        map[string]interface{}{"type": "string", "description": "Alias for topic_key"},
+			"scope":        map[string]interface{}{"type": "string", "description": "Scope: project|global|session"},
+			"tags":         map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
 		})},
 		{Name: "mem_search", Description: "Search observation memories (Engram compatibility alias)", InputSchema: schemaObj(map[string]interface{}{
 			"query":     map[string]interface{}{"type": "string", "description": "Search query"},
@@ -351,14 +355,18 @@ func (r *ToolRegistry) registerV2Tools() {
 			"project": map[string]interface{}{"type": "string", "description": "Filter by project (optional)"},
 		})},
 		{Name: "vault_mem_save", Description: "Save an episodic observation memory with deduplication and topic indexing", InputSchema: schemaObj(map[string]interface{}{
-			"content":   map[string]interface{}{"type": "string", "description": "Memory content or observation (required)"},
-			"title":     map[string]interface{}{"type": "string", "description": "Short title (optional, auto-generated from content if empty)"},
-			"type":      map[string]interface{}{"type": "string", "description": "Memory type: decision|architecture|workflow|bugfix|discovery|pattern|config|feedback"},
-			"project":   map[string]interface{}{"type": "string", "description": "Project name or ID (optional)"},
-			"topic_key": map[string]interface{}{"type": "string", "description": "Topic key for memory organization e.g. odd/tasks/feature (optional)"},
-			"topic":     map[string]interface{}{"type": "string", "description": "Alias for topic_key"},
-			"scope":     map[string]interface{}{"type": "string", "description": "Scope: project|global|session (optional)"},
-			"tags":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Additional custom tags"},
+			"operation_id": map[string]interface{}{"type": "string", "description": "Optional stable retry identity; the same ID must have the same request"},
+			"pinned":       map[string]interface{}{"type": "boolean", "description": "Persist the memory pin hint"},
+			"review_after": map[string]interface{}{"type": "string", "description": "Persist the review date hint"},
+			"expires_at":   map[string]interface{}{"type": "string", "description": "Persist the expiration date hint"},
+			"content":      map[string]interface{}{"type": "string", "description": "Memory content or observation (required)"},
+			"title":        map[string]interface{}{"type": "string", "description": "Short title (optional, auto-generated from content if empty)"},
+			"type":         map[string]interface{}{"type": "string", "description": "Memory type: decision|architecture|workflow|bugfix|discovery|pattern|config|feedback"},
+			"project":      map[string]interface{}{"type": "string", "description": "Project name or ID (optional)"},
+			"topic_key":    map[string]interface{}{"type": "string", "description": "Topic key for memory organization e.g. odd/tasks/feature (optional)"},
+			"topic":        map[string]interface{}{"type": "string", "description": "Alias for topic_key"},
+			"scope":        map[string]interface{}{"type": "string", "description": "Scope: project|global|session (optional)"},
+			"tags":         map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Additional custom tags"},
 		})},
 		{Name: "vault_mem_search", Description: "Search observation memories with preview truncation and filters", InputSchema: schemaObj(map[string]interface{}{
 			"query":     map[string]interface{}{"type": "string", "description": "Search query"},
@@ -382,6 +390,14 @@ func (r *ToolRegistry) registerV2Tools() {
 		{Name: "vault_mem_context", Description: "Build a compact agent-ready memory context pack for a project", InputSchema: schemaObj(map[string]interface{}{
 			"project": map[string]interface{}{"type": "string", "description": "Project name or ID (required)"},
 		})},
+		{Name: "vault_session_checkpoint", Description: "Save an explicit project/session/producer-agent checkpoint atomically; operation_id required", InputSchema: schemaObj(map[string]interface{}{
+			"project": map[string]interface{}{"type": "string"}, "session_id": map[string]interface{}{"type": "string"}, "agent_id": map[string]interface{}{"type": "string"},
+			"operation_id": map[string]interface{}{"type": "string"}, "summary": map[string]interface{}{"type": "string"}, "event": map[string]interface{}{"type": "string", "enum": []string{"manual", "before_compact", "agent_end", "session_switch"}},
+			"decisions": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}}, "pending": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+		}, "project", "session_id", "agent_id", "operation_id", "summary")},
+		{Name: "vault_session_resume", Description: "Read a bounded checkpoint for an explicit project/session/producer-agent; no global fallback", InputSchema: schemaObj(map[string]interface{}{
+			"project": map[string]interface{}{"type": "string"}, "session_id": map[string]interface{}{"type": "string"}, "agent_id": map[string]interface{}{"type": "string"}, "max_chars": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 64000},
+		}, "project", "session_id", "agent_id")},
 	}
 }
 
@@ -471,6 +487,8 @@ func (r *ToolRegistry) dispatch(ctx context.Context, name string, args map[strin
 		return r.handleSearchInstructions(ctx, args)
 	case "list_instructions":
 		return r.handleListInstructions(ctx, args)
+	case "vault_session_checkpoint", "vault_session_resume":
+		return r.handleSessionContinuity(ctx, name, args)
 	case "vault_mem_save", "mem_save":
 		return r.handleVaultMemSave(ctx, args)
 	case "vault_mem_search", "mem_search":
@@ -1789,19 +1807,37 @@ func (r *ToolRegistry) handleVaultMemSave(ctx context.Context, args map[string]i
 	if r.vaultMemSvc == nil {
 		return errResult("Error: vault memory service not available"), nil
 	}
+	// New optional hints must not silently change meaning through a wrong type.
+	for _, key := range []string{"operation_id", "review_after", "expires_at"} {
+		if value, present := args[key]; present {
+			if _, ok := value.(string); !ok {
+				return errResult("Error: " + key + " must be a string"), nil
+			}
+		}
+	}
+	if value, present := args["pinned"]; present {
+		if _, ok := value.(bool); !ok {
+			return errResult("Error: pinned must be a boolean"), nil
+		}
+	}
+
 	topic := strArg(args, "topic_key")
 	if topic == "" {
 		topic = strArg(args, "topic")
 	}
 	input := app.VaultMemSaveInput{
-		Title:    strArg(args, "title"),
-		Content:  strArg(args, "content"),
-		Type:     strArg(args, "type"),
-		Project:  strArg(args, "project"),
-		TopicKey: topic,
-		Topic:    topic,
-		Scope:    strArg(args, "scope"),
-		Tags:     parseStrings(args["tags"]),
+		Title:       strArg(args, "title"),
+		Content:     strArg(args, "content"),
+		Type:        strArg(args, "type"),
+		Project:     strArg(args, "project"),
+		TopicKey:    topic,
+		Topic:       topic,
+		OperationID: strArg(args, "operation_id"),
+		Pinned:      boolArg(args, "pinned"),
+		ReviewAfter: strArg(args, "review_after"),
+		ExpiresAt:   strArg(args, "expires_at"),
+		Scope:       strArg(args, "scope"),
+		Tags:        parseStrings(args["tags"]),
 	}
 	res, err := r.vaultMemSvc.Save(ctx, input)
 	if err != nil {
@@ -1901,10 +1937,13 @@ func errResult(text string) *ToolCallResult {
 	}
 }
 
-func schemaObj(props map[string]interface{}) json.RawMessage {
+func schemaObj(props map[string]interface{}, required ...string) json.RawMessage {
 	schema := map[string]interface{}{
 		"type":       "object",
 		"properties": props,
+	}
+	if len(required) > 0 {
+		schema["required"] = required
 	}
 	data, _ := json.Marshal(schema)
 	return data

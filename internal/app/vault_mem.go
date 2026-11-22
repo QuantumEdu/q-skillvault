@@ -19,18 +19,19 @@ import (
 type VaultMemSaveInput struct {
 	Title    string   `json:"title"`
 	Content  string   `json:"content"`
-	Type     string   `json:"type"`      // decision, architecture, workflow, bugfix, discovery, pattern, config, feedback, etc.
-	Project  string   `json:"project"`   // project name or slug
-	TopicKey string   `json:"topic_key"` // topic key (e.g. odd/tasks/my-feature)
+	Type     string   `json:"type"`            // decision, architecture, workflow, bugfix, discovery, pattern, config, feedback, etc.
+	Project  string   `json:"project"`         // project name or slug
+	TopicKey string   `json:"topic_key"`       // topic key (e.g. odd/tasks/my-feature)
 	Topic    string   `json:"topic,omitempty"` // alias for TopicKey
-	Scope    string   `json:"scope"`     // project, global, session
-	Tags     []string `json:"tags"`      // additional custom tags
+	Scope    string   `json:"scope"`           // project, global, session
+	Tags     []string `json:"tags"`            // additional custom tags
 
 	// Lifecycle hints. review_after marks when the fact should be re-checked,
 	// expires_at when it stops being true, pinned protects it from review.
 	Pinned      bool   `json:"pinned,omitempty"`
 	ReviewAfter string `json:"review_after,omitempty"`
 	ExpiresAt   string `json:"expires_at,omitempty"`
+	OperationID string `json:"operation_id,omitempty"`
 }
 
 // VaultMemSaveResult summarizes the save or deduplication outcome.
@@ -42,6 +43,7 @@ type VaultMemSaveResult struct {
 	TopicKey     string    `json:"topic_key,omitempty"`
 	Topic        string    `json:"topic,omitempty"`
 	Deduplicated bool      `json:"deduplicated"`
+	Replayed     bool      `json:"replayed,omitempty"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
@@ -188,130 +190,75 @@ func entryToSearchResult(e domain.Entry, tags []domain.Tag) VaultMemSearchResult
 // SaveVaultMem checks for duplicates by normalized hash within the project and persists observations.
 // Returns (*domain.EntryResult, deduplicated, error).
 func (s *EntryService) SaveVaultMem(ctx context.Context, input VaultMemSaveInput) (*domain.EntryResult, bool, error) {
-	content := strings.TrimSpace(input.Content)
-	title := strings.TrimSpace(input.Title)
+	result, err := s.saveVaultMem(ctx, input)
+	if err != nil {
+		return nil, false, err
+	}
+	return &result.Entry, result.Deduplicated, nil
+}
 
-	// Redact private blocks before validation, hashing, summarizing, or storing.
-	content = StripPrivateTags(content)
-	title = StripPrivateTags(title)
-
+func (s *EntryService) saveVaultMem(ctx context.Context, input VaultMemSaveInput) (*db.MemoryWriteResult, error) {
+	// Build effective request data before hashing, journaling, or opening a write.
+	content := StripPrivateTags(strings.TrimSpace(input.Content))
+	title := StripPrivateTags(strings.TrimSpace(input.Title))
 	if content == "" && title == "" {
-		return nil, false, fmt.Errorf("content or title is required for memory observation")
+		return nil, fmt.Errorf("content or title is required for memory observation")
 	}
-
 	hash := CalculateNormalizedHash(content)
-	externalRef := "hash:" + hash
-
-	projName := strings.TrimSpace(input.Project)
-	var projectID *string
-	if projName != "" {
-		// Ensure project exists to allow frictionless memory capture
-		p, err := s.projectStore.Get(ctx, projName)
-		if err != nil {
-			// Auto-created on capture: store the canonical slug, not the
-			// raw name, so the project resolves by `--project <slug>`
-			// like one created with add-project.
-			_ = s.projectStore.Save(ctx, domain.Project{
-				ID:     projName,
-				Name:   projName,
-				Slug:   slugify(projName),
-				Status: domain.StatusActive,
-			})
-			projectID = &projName
-		} else {
-			projectID = &p.ID
-		}
+	if content == "" {
+		hash = "title-v1:" + CalculateNormalizedHash(title)
 	}
-
-	// Dedupe on an indexed hash instead of scanning every entry in the project.
-	// The previous implementation listed the whole project on every save.
-	if existingID, found, findErr := s.store.FindByHash(ctx, projectID, hash); findErr == nil && found {
-		fullRes, getErr := s.store.Get(ctx, existingID, false)
-		if getErr == nil {
-			_ = s.store.BumpDuplicate(ctx, existingID)
-			return &fullRes, true, nil
-		}
-	}
-
-	// Not found: map types, build tags, generate summary
-	mappedType, typeTag := MapObservationType(input.Type)
-
 	if title == "" {
-		lines := strings.Split(content, "\n")
-		title = strings.TrimSpace(lines[0])
-		if len(title) > 60 {
-			title = title[:57] + "..."
+		title = strings.TrimSpace(strings.SplitN(content, "\n", 2)[0])
+		runes := []rune(title)
+		if len(runes) > 60 {
+			title = string(runes[:57]) + "..."
 		}
 	}
-
 	summary := content
-	if len(summary) > 300 {
-		summary = summary[:300]
+	if runes := []rune(summary); len(runes) > 300 {
+		summary = string(runes[:300])
 	}
-
-	topicKey := strings.TrimSpace(input.TopicKey)
-	if topicKey == "" {
-		topicKey = strings.TrimSpace(input.Topic)
+	topic := strings.TrimSpace(input.TopicKey)
+	if topic == "" {
+		topic = strings.TrimSpace(input.Topic)
 	}
-
+	mappedType, typeTag := MapObservationType(input.Type)
 	tags := []string{"mem"}
 	if typeTag != "" {
 		tags = append(tags, typeTag)
 	}
-	if topicKey != "" {
-		tags = append(tags, "topic_key:"+topicKey)
-		cleanTopic := strings.ReplaceAll(topicKey, "/", "-")
-		tags = append(tags, "topic:"+cleanTopic)
+	if topic != "" {
+		tags = append(tags, "topic_key:"+topic, "topic:"+strings.ReplaceAll(topic, "/", "-"))
 	}
-	if input.Scope != "" {
-		tags = append(tags, "scope:"+strings.ToLower(strings.TrimSpace(input.Scope)))
+	if scope := strings.ToLower(strings.TrimSpace(input.Scope)); scope != "" {
+		tags = append(tags, "scope:"+scope)
 	}
-	for _, t := range input.Tags {
-		if trimmed := strings.TrimSpace(t); trimmed != "" {
-			tags = append(tags, trimmed)
-		}
+	tags = append(tags, input.Tags...)
+	writer, ok := s.store.(db.AtomicMemoryStore)
+	if !ok {
+		return nil, fmt.Errorf("memory store does not support atomic writes")
 	}
-
-	saveInput := SaveEntryInput{
-		Title:       title,
-		Type:        string(mappedType),
-		Summary:     summary,
-		Body:        content,
-		Project:     projName,
-		Tags:        tags,
-		Status:      string(domain.StatusActive),
-		Purpose:     string(domain.PurposeKnowledge),
-		ExternalRef: externalRef,
+	baseID := slugify(title)
+	if baseID == "" {
+		baseID = "untitled"
 	}
-
-	entryRes, err := s.SaveEntry(ctx, saveInput)
+	project := strings.TrimSpace(input.Project)
+	result, err := writer.SaveMemory(ctx, db.MemoryWrite{
+		Entry: domain.Entry{Title: title, Type: mappedType, Purpose: domain.PurposeKnowledge, Summary: summary, BodyOptional: content, ExternalRef: "hash:" + hash},
+		Tags:  tags, ProjectRef: project, ProjectSlug: slugify(project), BaseID: baseID,
+		Hints:       db.MemoryHints{NormalizedHash: hash, TopicKey: topic, Pinned: input.Pinned, ReviewAfter: input.ReviewAfter, ExpiresAt: input.ExpiresAt},
+		OperationID: input.OperationID,
+	})
 	if err != nil {
-		return nil, false, fmt.Errorf("save vault mem: %w", err)
+		return nil, fmt.Errorf("save vault mem: %w", err)
 	}
-
-	// A topic that evolves replaces its previous revision instead of piling up.
-	// Looked up BEFORE the hints are written, otherwise the new entry matches
-	// itself and supersedes nothing.
-	if topicKey != "" {
-		if olderID, found, findErr := s.store.FindByTopic(ctx, projectID, topicKey, title); findErr == nil &&
-			found && olderID != entryRes.Entry.Entry.ID {
-			_, _ = s.store.Supersede(ctx, olderID, entryRes.Entry.Entry.ID)
-		}
+	// Embeddings are derived data. Never report a committed memory as failed just
+	// because the optional model/index is unavailable; explicit reindexing can repair it.
+	if s.vector != nil && !result.Replayed {
+		_ = s.vector.EnsureEmbedded(ctx, result.Entry.Entry.ID)
 	}
-
-	// Record the mechanics next to the entry: the hash the next save dedupes
-	// against, the topic a newer save supersedes, and the lifecycle hints.
-	if err := s.store.SetMemoryHints(ctx, entryRes.Entry.Entry.ID, db.MemoryHints{
-		NormalizedHash: hash,
-		TopicKey:       topicKey,
-		Pinned:         input.Pinned,
-		ReviewAfter:    input.ReviewAfter,
-		ExpiresAt:      input.ExpiresAt,
-	}); err != nil {
-		return nil, false, err
-	}
-
-	return &entryRes.Entry, false, nil
+	return result, nil
 }
 
 // SearchVaultMem searches memory observations with 300-char preview truncation and filters for project, topic_key, and type.
@@ -560,20 +507,18 @@ func (s *VaultMemService) WithDB(database *sql.DB) *VaultMemService {
 
 // Save delegates to entrySvc.SaveVaultMem and maps to VaultMemSaveResult.
 func (s *VaultMemService) Save(ctx context.Context, input VaultMemSaveInput) (*VaultMemSaveResult, error) {
-	entryRes, dedup, err := s.entrySvc.SaveVaultMem(ctx, input)
+	result, err := s.entrySvc.saveVaultMem(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 
+	entryRes := &result.Entry
 	proj := ""
 	if entryRes.Entry.ProjectID != nil {
 		proj = *entryRes.Entry.ProjectID
 	}
 
-	topicKey := input.TopicKey
-	if topicKey == "" {
-		topicKey = input.Topic
-	}
+	topicKey := result.TopicKey
 
 	return &VaultMemSaveResult{
 		ID:           entryRes.Entry.ID,
@@ -582,7 +527,8 @@ func (s *VaultMemService) Save(ctx context.Context, input VaultMemSaveInput) (*V
 		Project:      proj,
 		TopicKey:     topicKey,
 		Topic:        topicKey,
-		Deduplicated: dedup,
+		Deduplicated: result.Deduplicated,
+		Replayed:     result.Replayed,
 		UpdatedAt:    entryRes.Entry.UpdatedAt,
 	}, nil
 }

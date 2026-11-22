@@ -27,6 +27,7 @@ type memSaveFlags struct {
 	Pinned      bool
 	ReviewAfter string
 	ExpiresAt   string
+	OperationID string
 	JSON        bool
 }
 
@@ -53,6 +54,7 @@ func parseMemSaveFlags(args []string) (memSaveFlags, error) {
 	fs := flag.NewFlagSet("mem-save", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
+	fs.StringVar(&f.OperationID, "operation-id", "", "Stable retry identity; reuse only for the same save request")
 	fs.StringVar(&f.Content, "content", "", "Observation content")
 	fs.StringVar(&f.Title, "title", "", "Short title")
 	fs.StringVar(&f.Type, "type", "decision", "Observation type")
@@ -115,6 +117,7 @@ func runMemSave(ctx context.Context, svc *Services, args []string) {
 		Pinned:      flags.Pinned,
 		ReviewAfter: flags.ReviewAfter,
 		ExpiresAt:   flags.ExpiresAt,
+		OperationID: flags.OperationID,
 	})
 	if err != nil {
 		PrintError(err)
@@ -127,7 +130,9 @@ func runMemSave(ctx context.Context, svc *Services, args []string) {
 		return
 	}
 
-	if res.Deduplicated {
+	if res.Replayed {
+		fmt.Printf("Observation replayed: %s\n", res.ID)
+	} else if res.Deduplicated {
 		fmt.Printf("Observation deduplicated: %s\n", res.ID)
 	} else {
 		fmt.Printf("Observation saved: %s\n", res.ID)

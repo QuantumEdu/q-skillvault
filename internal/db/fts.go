@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -23,6 +24,18 @@ func (s *sqliteSearchStore) RebuildFTS(ctx context.Context) error {
 	defer func() {
 		_ = tx.Rollback()
 	}()
+
+	if err := rebuildFTSInTransaction(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("rebuild fts: commit: %w", err)
+	}
+	return nil
+}
+
+// rebuildFTSInTransaction lets import atomically commit content and its index.
+func rebuildFTSInTransaction(ctx context.Context, tx *sql.Tx) error {
 
 	if _, err := tx.ExecContext(ctx, "DELETE FROM entries_fts"); err != nil {
 		return fmt.Errorf("rebuild fts: clear index: %w", err)
@@ -76,8 +89,5 @@ func (s *sqliteSearchStore) RebuildFTS(ctx context.Context) error {
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("rebuild fts: commit: %w", err)
-	}
 	return nil
 }

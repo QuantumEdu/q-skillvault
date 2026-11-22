@@ -101,6 +101,8 @@ func Run(cmd string, args []string) {
 		runMCPAudit(ctx, svc, args)
 	case "sync-engram":
 		runSyncEngram(ctx, svc, args)
+	case "mem-checkpoint", "mem-resume":
+		runSessionContinuity(ctx, svc, args)
 	case "mem-save":
 		runMemSave(ctx, svc, args)
 	case "mem-search":

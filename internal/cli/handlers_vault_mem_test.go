@@ -173,3 +173,10 @@ func TestParseMemPromoteFlags(t *testing.T) {
 		}
 	})
 }
+
+func TestParseMemoryOperationID(t *testing.T) {
+	flags, err := parseMemSaveFlags([]string{"skillvault", "mem", "save", "--content", "fact", "--operation-id", "session-1/turn-2", "--json"})
+	if err != nil || flags.OperationID != "session-1/turn-2" || !flags.JSON {
+		t.Fatalf("operation flag: %+v %v", flags, err)
+	}
+}

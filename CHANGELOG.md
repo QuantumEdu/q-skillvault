@@ -2,6 +2,30 @@
 
 All notable changes to SkillVault Qu@ntum are documented here.
 
+## v3.8.0 — Independent Memory Integrity & Native Session Continuity
+
+**2026-11-22**
+
+### Added
+- Native `mem checkpoint` / `mem resume` and MCP `vault_session_checkpoint` / `vault_session_resume` provide explicit project/session/producer-agent continuity on existing handoff entries. Atomic retry-safe checkpoints preserve summary, decisions, and pending work; read-only recovery uses a bounded Unicode context with no cross-stream fallback. No additional schema, agent hooks, or Engram runtime dependency.
+- Atomic memory saves combine project creation, content/tags/FTS, deduplication, supersession, and lifecycle hints in one SQLite transaction. Migration 015 adds a local retry journal. Optional `mem save --operation-id` and MCP `operation_id` return the original acknowledgement on retry without incrementing duplicate counters; conflicting reuse fails.
+- Export schema v4 includes memory hashes/topics, lifecycle fields, revision/duplicate counters, supersession chains, entry content history, entry timestamps, and inactive graph edges. Exports read a single SQLite snapshot. Older snapshots (v1–v3) remain importable; older binaries reject v4 rather than silently dropping its new state.
+- Migration 014 reconciles SQLite's relation constraint with all public relation types, including `contradicts` and `cites`, preserving existing edges and indexes. Migrations from 014 onward execute atomically; historical migration scripts retain their existing behavior.
+
+### Fixed
+- Concurrent memory writers reserve SQLite’s write lock before identity checks and allocate IDs inside the transaction. Failed metadata/journal writes roll back the complete save. Title-only observations use title-based hashes; derived titles and summaries preserve UTF-8. Existing observations are not rewritten.
+- Restoring an entry version preserves its current tags, including memory/provenance tags.
+- Import commits content, metadata, history, and a populated FTS index together; conflicting historical versions fail and roll back the import. Repeated imports preserve version identity.
+- Namespaced pack imports also namespace memory ownership, supersession targets, and history IDs. Legacy imports without quality fields preserve existing destination quality and entry timestamps.
+- Schema v4 replaces tags for imported entries and preserves inactive relation state instead of reactivating historical edges.
+
+### Compatibility and limits
+- Back up the SQLite database before opening it with v3.8.0: migrations 014–015 run on normal vault open. Migration 014 rebuilds relation constraints; 015 adds the local retry journal. No production migration was run during development.
+- CLI/MCP additions preserve existing calls. Portable export v4 preserves more memory state; older binaries reject v4. Import v1–v3 remains supported. The retry journal is local and is not exported.
+- Recovery context budgets count Unicode characters, not tokens. Native checkpoints are explicit; no automatic agent hooks or OMP configuration changes are installed.
+
+This release strengthens standalone SkillVault memory. Engram remains an optional compatibility/import integration, not a runtime dependency. Automatic capture, full Engram contract parity, lifecycle enforcement, and hybrid retrieval remain separate roadmap work.
+
 ## v3.7.1 — Agent Discoverability & Slug Fixes
 
 **2026-11-18**

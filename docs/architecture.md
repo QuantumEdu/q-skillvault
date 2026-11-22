@@ -265,3 +265,11 @@ Dos modos:
 | Typed `entry_links` | `depends_on`, `contradicts`, `cites`, `supersedes`, `part_of` relations enable a semantic knowledge graph without a graph DB |
 | `mem promote` | Frequent observations (`duplicate_count >= threshold`) are promoted to formal `decision`/`skill` entries to build canonical knowledge from agent-learned facts |
 | `StripPrivateTags` | `<private>…</private>` blocks are redacted to `[REDACTED]` before FTS5 indexing and context compilation, preventing credential leaks |
+
+## v3.8.0 memory integrity and native continuity
+
+Memory capture uses an optional atomic store capability to commit project creation, entry/tags/FTS, deduplication, supersession, and lifecycle hints together. Migration 015 stores local retry acknowledgements keyed by caller operation ID; this journal is excluded from portable exports. Embeddings remain derived work after commit. Migration 014 reconciles graph relation constraints, and migrations from 014 onward execute transactionally.
+
+Portable export v4 reads one SQLite snapshot and preserves quality/history/graph state; imports validate and commit authoritative data plus FTS together. Native session checkpoints reuse handoff entries and identity tags, scoped by canonical project ID and case-sensitive session/producer IDs. Recovery uses a SQLite read transaction and bounds the returned context by Unicode characters. No third memory backend is introduced.
+
+See [Native session continuity](session-continuity.md) for identity, retry, portability and rollback limits. Agent event adapters and automatic capture remain future integrations.

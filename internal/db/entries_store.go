@@ -34,6 +34,14 @@ func (s *sqliteEntryStore) Save(ctx context.Context, entry domain.Entry, tags []
 	}
 	defer tx.Rollback()
 
+	if err := s.saveEntryTx(ctx, tx, entry, tags); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *sqliteEntryStore) saveEntryTx(ctx context.Context, tx *sql.Tx, entry domain.Entry, tags []string) error {
+
 	projectID := interface{}(nil)
 	if entry.ProjectID != nil {
 		projectID = *entry.ProjectID
@@ -52,9 +60,9 @@ func (s *sqliteEntryStore) Save(ctx context.Context, entry domain.Entry, tags []
 	tagsDenorm := strings.Join(tags, " ")
 
 	for _, tag := range tags {
-		_, _ = tx.ExecContext(ctx,
-			"INSERT OR IGNORE INTO tags (id, name, slug) VALUES (?, ?, ?)",
-			tag, tag, tag)
+		if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO tags (id, name, slug) VALUES (?, ?, ?)", tag, tag, tag); err != nil {
+			return fmt.Errorf("save tag: %w", err)
+		}
 	}
 
 	// Archive previous content before UPSERT when the entry exists and
@@ -69,7 +77,7 @@ func (s *sqliteEntryStore) Save(ctx context.Context, entry domain.Entry, tags []
 		createdAtVal = entry.CreatedAt.UTC().Format("2006-01-02 15:04:05.000")
 	}
 
-	_, err = tx.ExecContext(ctx, `
+	_, err := tx.ExecContext(ctx, `
 		INSERT INTO entries (id, name, title, slug, type, content, summary, body_optional, purpose, status, project_id, artifact_id, external_ref, tags_denorm, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), strftime('%Y-%m-%d %H:%M:%f', 'now')), strftime('%Y-%m-%d %H:%M:%f', 'now'))
 		ON CONFLICT(id) DO UPDATE SET
@@ -105,7 +113,7 @@ func (s *sqliteEntryStore) Save(ctx context.Context, entry domain.Entry, tags []
 		return fmt.Errorf("sync FTS5: %w", err)
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 // archiveBeforeSave inserts a version row for the current entry content
@@ -158,6 +166,15 @@ func (s *sqliteEntryStore) archiveBeforeSave(ctx context.Context, tx *sql.Tx, ne
 }
 
 func (s *sqliteEntryStore) Get(ctx context.Context, id string, includeArchived bool) (domain.EntryResult, error) {
+	return readEntry(ctx, s.db, id, includeArchived)
+}
+
+type entryReader interface {
+	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
+}
+
+func readEntry(ctx context.Context, reader entryReader, id string, includeArchived bool) (domain.EntryResult, error) {
 	var result domain.EntryResult
 	var projectID sql.NullString
 	var artifactID sql.NullString
@@ -167,10 +184,11 @@ func (s *sqliteEntryStore) Get(ctx context.Context, id string, includeArchived b
 	var createdAtStr sql.NullString
 	var updatedAtStr sql.NullString
 
-	err := s.db.QueryRowContext(ctx, `
+	err := reader.QueryRowContext(ctx, `
 		SELECT id, title, slug, type, purpose, project_id, summary, body_optional, status, artifact_id, COALESCE(external_ref,''), COALESCE(created_at, ''), COALESCE(updated_at, '')
 		FROM entries WHERE (id = ? OR slug = ?)
-	`, id, id).Scan(&result.Entry.ID, &result.Entry.Title, &result.Entry.Slug, &result.Entry.Type,
+        ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END LIMIT 1
+	`, id, id, id).Scan(&result.Entry.ID, &result.Entry.Title, &result.Entry.Slug, &result.Entry.Type,
 		&result.Entry.Purpose, &projectID, &summary, &bodyOptional, &status, &artifactID, &result.Entry.ExternalRef, &createdAtStr, &updatedAtStr)
 	if err == sql.ErrNoRows {
 		return result, fmt.Errorf("entry %q not found", id)
@@ -207,7 +225,7 @@ func (s *sqliteEntryStore) Get(ctx context.Context, id string, includeArchived b
 		return result, fmt.Errorf("archived: entry %q exists but is archived. Retry with include_archived=true.", id)
 	}
 
-	tagRows, err := s.db.QueryContext(ctx, "SELECT tag FROM entry_tags WHERE entry_id = ? ORDER BY tag", id)
+	tagRows, err := reader.QueryContext(ctx, "SELECT tag FROM entry_tags WHERE entry_id = ? ORDER BY tag", result.Entry.ID)
 	if err != nil {
 		return result, fmt.Errorf("get tags: %w", err)
 	}
@@ -220,7 +238,7 @@ func (s *sqliteEntryStore) Get(ctx context.Context, id string, includeArchived b
 		result.Tags = append(result.Tags, domain.Tag{ID: tag, Name: tag, Slug: tag})
 	}
 
-	return result, nil
+	return result, tagRows.Err()
 }
 
 const maxFTS5Tokens = 32

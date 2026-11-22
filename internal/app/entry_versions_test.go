@@ -85,7 +85,7 @@ func TestEntryVersionServiceRestoreVersion(t *testing.T) {
 		BodyOptional: "Original body",
 		Status:       domain.StatusActive,
 	}
-	if err := svc.entryStore.Save(ctx, entry, nil); err != nil {
+	if err := svc.entryStore.Save(ctx, entry, []string{"mem", "topic_key:storage/sqlite", "promoted-from:source"}); err != nil {
 		t.Fatalf("save v1 failed: %v", err)
 	}
 
@@ -93,7 +93,7 @@ func TestEntryVersionServiceRestoreVersion(t *testing.T) {
 	entry.Title = "Updated Title"
 	entry.Summary = "Updated summary"
 	entry.BodyOptional = "Updated body"
-	if err := svc.entryStore.Save(ctx, entry, nil); err != nil {
+	if err := svc.entryStore.Save(ctx, entry, []string{"mem", "topic_key:storage/sqlite", "promoted-from:source"}); err != nil {
 		t.Fatalf("save v2 failed: %v", err)
 	}
 
@@ -117,6 +117,14 @@ func TestEntryVersionServiceRestoreVersion(t *testing.T) {
 		t.Errorf("after restore body = %q, want 'Original body'", current.Entry.BodyOptional)
 	}
 
+	if len(current.Tags) != 3 {
+		t.Fatalf("restore lost tags: %+v", current.Tags)
+	}
+	for _, tag := range current.Tags {
+		if tag.Name != "mem" && tag.Name != "topic_key:storage/sqlite" && tag.Name != "promoted-from:source" {
+			t.Fatalf("unexpected tag: %s", tag.Name)
+		}
+	}
 	// v2 (pre-restore state) should have been archived as version 2.
 	versions, err := svc.ListVersions(ctx, "restore-test")
 	if err != nil {
