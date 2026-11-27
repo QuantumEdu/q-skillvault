@@ -103,6 +103,18 @@ func (s *VaultExportService) ExportVault(ctx context.Context, input ExportVaultI
 }
 
 func writePrivateExport(path string, data []byte) error {
+	info, err := os.Lstat(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("resolve export destination: %w", err)
+		}
+		path = resolved
+	}
+
 	file, err := os.CreateTemp(filepath.Dir(path), ".skillvault-export-*")
 	if err != nil {
 		return err

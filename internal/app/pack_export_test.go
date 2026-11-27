@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -127,6 +128,43 @@ func TestPackExportRoundTrip(t *testing.T) {
 	}
 	if result.Entry.Title != "Test Entry" {
 		t.Errorf("imported title = %q, want 'Test Entry'", result.Entry.Title)
+	}
+}
+
+func TestPackExportUpdatesSymlinkDestination(t *testing.T) {
+	exportSvc, _, cleanup := setupPackExportService(t)
+	defer cleanup()
+	dir := t.TempDir()
+	target := filepath.Join(dir, "old.svpack")
+	if err := os.WriteFile(target, []byte("previous export"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "export.svpack")
+	if err := os.Symlink(filepath.Base(target), link); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	if err := exportSvc.ExportPack(context.Background(), ExportPackInput{OutputPath: link}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Readlink(link); err != nil {
+		t.Fatalf("export path must remain a symlink: %v", err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !json.Valid(data) {
+		t.Fatal("symlink destination was not updated with the pack")
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Fatalf("export permissions = %o, want 0600", info.Mode().Perm())
 	}
 }
 
