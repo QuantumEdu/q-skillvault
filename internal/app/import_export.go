@@ -164,7 +164,7 @@ func (s *VaultImportService) ImportVault(ctx context.Context, data domain.VaultE
 	if err != nil {
 		return fmt.Errorf("validate snapshot: %w", err)
 	}
-	if err := security.RejectSecrets(string(encoded)); err != nil {
+	if err := security.RejectJSONSecrets(encoded); err != nil {
 		return fmt.Errorf("snapshot import blocked: %w", err)
 	}
 	if err := s.resolveSlugConflicts(ctx, &data); err != nil {
@@ -230,7 +230,7 @@ func encodeSnapshot(data domain.VaultExport) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
-	if err := security.RejectSecrets(string(jsonBytes)); err != nil {
+	if err := security.RejectJSONSecrets(jsonBytes); err != nil {
 		return nil, fmt.Errorf("snapshot export blocked: %w", err)
 	}
 	return jsonBytes, nil

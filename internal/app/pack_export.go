@@ -72,7 +72,7 @@ func (s *VaultPackExportService) ExportPack(ctx context.Context, input ExportPac
 	if err != nil {
 		return fmt.Errorf("marshal pack export: %w", err)
 	}
-	if err := security.RejectSecrets(string(jsonBytes)); err != nil {
+	if err := security.RejectJSONSecrets(jsonBytes); err != nil {
 		return fmt.Errorf("pack export blocked: %w", err)
 	}
 

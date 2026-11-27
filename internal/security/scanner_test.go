@@ -1,6 +1,16 @@
 package security
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestRejectJSONSecretsChecksDecodedStrings(t *testing.T) {
+	data := []byte(`{"history":[{"body":"Bearer\t` + strings.Repeat("z", 30) + `"}]}`)
+	if err := RejectJSONSecrets(data); err != ErrSecretDetected {
+		t.Fatalf("RejectJSONSecrets returned %v", err)
+	}
+}
 
 func TestScanOpenAIKey(t *testing.T) {
 	s := New()

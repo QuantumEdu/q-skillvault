@@ -1,7 +1,10 @@
 package security
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"regexp"
 )
 
@@ -44,6 +47,26 @@ func RejectSecrets(values ...string) error {
 		}
 	}
 	return nil
+}
+
+// RejectJSONSecrets inspects decoded strings, including object keys.
+func RejectJSONSecrets(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if value, ok := token.(string); ok {
+			if err := RejectSecrets(value); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 type SecretScanner struct{}
