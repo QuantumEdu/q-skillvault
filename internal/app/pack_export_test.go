@@ -28,6 +28,29 @@ func setupPackExportService(t *testing.T) (*VaultPackExportService, *db.Store, f
 	return exportSvc, store, cleanup
 }
 
+func TestApplyPrefixPrefersExactIDs(t *testing.T) {
+	data := domain.VaultData{
+		Entries: []domain.Entry{
+			{ID: "first", Slug: "first"},
+			{ID: "second", Slug: "first"},
+			{ID: "routing", Type: domain.EntryTypeRouting, BodyOptional: "scenario:\n  skill: first\n  workflow: plan\n"},
+		},
+		Workflows: []domain.Workflow{
+			{ID: "plan", Slug: "plan"},
+			{ID: "other", Slug: "plan"},
+		},
+		WorkflowSteps: []domain.WorkflowStep{{EntrySlug: "first", WorkflowID: "plan"}},
+	}
+	applyPrefix("copy/", &data)
+	if step := data.WorkflowSteps[0]; step.EntrySlug != "copy/first" || step.WorkflowID != "copy/plan" {
+		t.Fatalf("incorrect prefixed workflow step: %+v", step)
+	}
+	body := data.Entries[2].BodyOptional
+	if !strings.Contains(body, "skill: copy/first") || !strings.Contains(body, "workflow: copy/plan") {
+		t.Fatalf("incorrect prefixed routing entry: %s", body)
+	}
+}
+
 func TestPackExportRoundTrip(t *testing.T) {
 	exportSvc, store, cleanup := setupPackExportService(t)
 	defer cleanup()

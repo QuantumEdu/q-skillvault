@@ -274,7 +274,10 @@ func applyPrefix(prefix string, data *domain.VaultData) {
 		if slug == "" {
 			slug = entry.Title
 		}
-		entryRefs[entry.ID], entryRefs[slug] = prefix+entry.ID, prefix+entry.ID
+		if _, exists := entryRefs[slug]; slug != "" && !exists {
+			entryRefs[slug] = prefix + entry.ID
+		}
+		entryRefs[entry.ID] = prefix + entry.ID
 	}
 	workflowRefs := make(map[string]string, len(data.Workflows)*2)
 	for _, workflow := range data.Workflows {
@@ -282,7 +285,10 @@ func applyPrefix(prefix string, data *domain.VaultData) {
 		if slug == "" {
 			slug = workflow.Name
 		}
-		workflowRefs[workflow.ID], workflowRefs[slug] = prefix+workflow.ID, prefix+workflow.ID
+		if _, exists := workflowRefs[slug]; slug != "" && !exists {
+			workflowRefs[slug] = prefix + workflow.ID
+		}
+		workflowRefs[workflow.ID] = prefix + workflow.ID
 	}
 	if data.MemoryQuality != nil {
 		quality := make(map[string]domain.MemoryQualityRecord, len(data.MemoryQuality))
