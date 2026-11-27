@@ -512,7 +512,7 @@ func runMemPromote(ctx context.Context, svc *Services, args []string) {
 		os.Exit(1)
 	}
 
-	res, err := svc.entrySvc.PromoteVaultMem(ctx, app.PromoteVaultMemInput{
+	res, err := svc.vaultMemSvc.Promote(ctx, app.PromoteVaultMemInput{
 		ID:                flags.ID,
 		TargetType:        flags.Type,
 		Project:           flags.Project,

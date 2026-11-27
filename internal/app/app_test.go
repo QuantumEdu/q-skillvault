@@ -12,6 +12,7 @@ import (
 
 	"github.com/quantum-6/skillvault/internal/db"
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/files"
 )
 
 func setupAppServices(t *testing.T) (*db.Store, *EntryService, *ArtifactService, *WorkflowService, *SeriesService, *ProjectService, *ContextService, *SessionService, *VaultExportService, *VaultImportService, func()) {
@@ -27,12 +28,16 @@ func setupAppServices(t *testing.T) (*db.Store, *EntryService, *ArtifactService,
 	store := db.NewStore(sqlDB)
 
 	entrySvc := NewEntryService(store.Entries, store.Projects, store.Artifacts)
-	artifactSvc := NewArtifactService(store.Artifacts, store.Entries, store.Projects)
+	fileSvc, err := files.NewArtifactFileService(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactSvc := NewArtifactService(store.Artifacts, store.Entries, store.Projects, fileSvc)
 	workflowSvc := NewWorkflowService(store.Workflows)
 	seriesSvc := NewSeriesService(store.Series, store.Entries)
 	projectSvc := NewProjectService(store.Projects)
 	contextSvc := NewContextService(store.Entries, store.Projects, store.Series, store.Workflows, store.Artifacts, entrySvc)
-	sessionSvc := NewSessionService(entrySvc, artifactSvc, projectSvc, store.Entries, store.Artifacts, store.Projects)
+	sessionSvc := NewSessionService(store, artifactSvc)
 	exportSvc := NewVaultExportService(store.ImportExport, store.Artifacts, store.Entries, store.Projects, store.Workflows)
 	importSvc := NewVaultImportService(store.ImportExport, store.Entries, store.Projects, store.Artifacts)
 
@@ -1096,11 +1101,10 @@ func TestGetContextExcludesArchivedByDefault(t *testing.T) {
 	})
 
 	pack, err := svc.GetContext(ctx, ContextInput{
-		Mode:            "planning",
-		Project:         proj.ID,
-		Include:         []string{"decisions"},
-		ExcludeArchived: true,
-		MaxChars:        5000,
+		Mode:     "planning",
+		Project:  proj.ID,
+		Include:  []string{"decisions"},
+		MaxChars: 5000,
 	})
 	if err != nil {
 		t.Fatalf("GetContext failed: %v", err)
@@ -1253,18 +1257,23 @@ func TestSaveArtifactWithFilePath(t *testing.T) {
 
 	projectSvc.SaveProject(ctx, SaveProjectInput{Name: "testproj"})
 
+	source, _, _, err := svc.files.WriteArtifact("test-source", []byte("file contents"), "text/markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
 	artifact, err := svc.SaveArtifact(ctx, SaveArtifactInput{
 		Title:    "File Artifact",
 		Type:     "markdown",
-		FilePath: "/tmp/artifact.md",
+		FilePath: source,
 		Summary:  "File-backed",
 		Project:  "testproj",
 	})
 	if err != nil {
 		t.Fatalf("SaveArtifact failed: %v", err)
 	}
-	if artifact.FilePath != "/tmp/artifact.md" {
-		t.Errorf("FilePath = %q, want '/tmp/artifact.md'", artifact.FilePath)
+	content, err := svc.files.ReadArtifact(artifact.FilePath)
+	if err != nil || string(content) != "file contents" || artifact.FilePath == source {
+		t.Fatalf("did not persist a managed copy: %q, %v", content, err)
 	}
 }
 

@@ -1,6 +1,9 @@
 package security
 
-import "regexp"
+import (
+	"errors"
+	"regexp"
+)
 
 type Match struct {
 	Pattern string
@@ -24,6 +27,23 @@ var patterns = []secretPattern{
 	{regexp.MustCompile(`-----BEGIN (RSA |EC |OPENSSH |)?PRIVATE KEY-----`), "private_key"},
 	{regexp.MustCompile(`ghp_[A-Za-z0-9_]{20,}`), "github_token"},
 	{regexp.MustCompile(`xox[baprs]-[A-Za-z0-9-]{20,}`), "slack_token"},
+	{regexp.MustCompile(`(?i)(?:AKIA|ASIA)[0-9A-Z]{16}`), "aws_access_key"},
+	{regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9_.-]{25,}`), "bearer_token"},
+	{regexp.MustCompile(`github_pat_[A-Za-z0-9_]{30,}`), "github_token"},
+}
+
+var ErrSecretDetected = errors.New("known credential detected; remove it or use a secret reference")
+
+// RejectSecrets checks known credential patterns without including matches in errors.
+func RejectSecrets(values ...string) error {
+	for _, value := range values {
+		for _, pattern := range patterns {
+			if pattern.re.MatchString(value) {
+				return ErrSecretDetected
+			}
+		}
+	}
+	return nil
 }
 
 type SecretScanner struct{}

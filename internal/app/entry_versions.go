@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/quantum-6/skillvault/internal/db"
@@ -63,10 +61,4 @@ func (s *EntryVersionService) RestoreVersion(ctx context.Context, entryID string
 	}
 
 	return nil
-}
-
-func generateVersionID() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return "ver-" + hex.EncodeToString(b)
 }

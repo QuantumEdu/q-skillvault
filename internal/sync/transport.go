@@ -18,6 +18,8 @@ type Transport interface {
 
 // GzipTransport wraps a Transport and applies gzip compression on push
 // and decompression on pull.
+const maxSnapshotBytes = 256 << 20
+
 type GzipTransport struct {
 	inner Transport
 }
@@ -30,6 +32,7 @@ func NewGzipTransport(inner Transport) *GzipTransport {
 // Push compresses reader through gzip and pushes the compressed stream via the inner transport.
 func (g *GzipTransport) Push(ctx context.Context, reader io.Reader, key string) error {
 	pr, pw := io.Pipe()
+	defer pr.Close()
 	go func() {
 		gw := gzip.NewWriter(pw)
 		if _, err := io.Copy(gw, reader); err != nil {
@@ -50,6 +53,7 @@ func (g *GzipTransport) Push(ctx context.Context, reader io.Reader, key string) 
 // and writes the result to writer.
 func (g *GzipTransport) Pull(ctx context.Context, writer io.Writer, key string) error {
 	pr, pw := io.Pipe()
+	defer pr.Close()
 	go func() {
 		err := g.inner.Pull(ctx, pw, key)
 		pw.CloseWithError(err)
@@ -59,8 +63,18 @@ func (g *GzipTransport) Pull(ctx context.Context, writer io.Writer, key string) 
 		return fmt.Errorf("gzip reader: %w", err)
 	}
 	defer gr.Close()
-	if _, err := io.Copy(writer, gr); err != nil {
+	_, err = io.CopyN(writer, gr, maxSnapshotBytes)
+	if err != nil && err != io.EOF {
 		return fmt.Errorf("gzip decompress: %w", err)
+	}
+	if err == nil {
+		var extra [1]byte
+		if _, err := io.ReadFull(gr, extra[:]); err != io.EOF {
+			if err != nil {
+				return fmt.Errorf("gzip decompress: %w", err)
+			}
+			return fmt.Errorf("decompressed snapshot exceeds %d bytes", maxSnapshotBytes)
+		}
 	}
 	return nil
 }

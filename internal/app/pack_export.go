@@ -11,6 +11,7 @@ import (
 
 	"github.com/quantum-6/skillvault/internal/db"
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 // VaultPackExportService produces skill pack exports wrapping a full
@@ -71,12 +72,15 @@ func (s *VaultPackExportService) ExportPack(ctx context.Context, input ExportPac
 	if err != nil {
 		return fmt.Errorf("marshal pack export: %w", err)
 	}
+	if err := security.RejectSecrets(string(jsonBytes)); err != nil {
+		return fmt.Errorf("pack export blocked: %w", err)
+	}
 
 	path := input.OutputPath
 	if path == "" {
 		path = "skillvault-pack.svpack"
 	}
-	if err := os.WriteFile(path, jsonBytes, 0644); err != nil {
+	if err := os.WriteFile(path, jsonBytes, 0600); err != nil {
 		return fmt.Errorf("write pack export file: %w", err)
 	}
 

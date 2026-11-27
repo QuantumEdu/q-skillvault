@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/quantum-6/skillvault/internal/domain"
@@ -40,6 +41,10 @@ func NewLinkService(entrySvc *EntryService) *LinkService {
 func (s *LinkService) SaveLink(ctx context.Context, input SaveLinkInput) (*GetEntryResult, error) {
 	if input.URL == "" {
 		return nil, fmt.Errorf("link URL is required")
+	}
+	parsed, err := url.Parse(input.URL)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Hostname() == "" || parsed.User != nil {
+		return nil, fmt.Errorf("link must be an absolute HTTP or HTTPS URL without embedded credentials")
 	}
 
 	title := input.Title

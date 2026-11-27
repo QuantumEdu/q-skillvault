@@ -2,9 +2,13 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +19,7 @@ import (
 
 	"github.com/quantum-6/skillvault/internal/app"
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 // Server is the HTTP API server.
@@ -60,27 +65,33 @@ func NewServer(
 }
 
 // WithAPIKey sets the API key for bearer token authentication.
-// When set, all write endpoints require Authorization: Bearer <key>.
+// All vault endpoints require Authorization: Bearer <key>.
 func (s *Server) WithAPIKey(key string) *Server {
 	s.apiKey = key
 	return s
 }
 
-// authMiddleware wraps a handler to require a valid API key on write operations.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
-	if s.apiKey == "" {
-		return next
-	}
+	expected := sha256.Sum256([]byte(s.apiKey))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Health and GET requests are always allowed.
-		if r.URL.Path == "/health" || r.Method == http.MethodGet {
+		if r.URL.Path == "/health" {
 			next.ServeHTTP(w, r)
 			return
 		}
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != s.apiKey {
+		token, bearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		actual := sha256.Sum256([]byte(token))
+		if s.apiKey == "" || !bearer || subtle.ConstantTimeCompare(actual[:], expected[:]) != 1 {
+			w.Header().Set("WWW-Authenticate", "Bearer")
 			writeError(w, http.StatusUnauthorized, "invalid or missing API key")
 			return
+		}
+		if r.Method == http.MethodPost {
+			mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if err != nil || mediaType != "application/json" {
+				writeError(w, http.StatusUnsupportedMediaType, "application/json required")
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, 16<<20)
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -88,6 +99,9 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 // Start begins listening. Returns error if unable to start.
 func (s *Server) Start() error {
+	if strings.TrimSpace(s.apiKey) == "" {
+		return fmt.Errorf("HTTP API key required")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/entries", s.handleEntries)
@@ -102,8 +116,11 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/import", s.handleImport)
 
 	s.srv = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", s.host, s.port),
-		Handler: s.authMiddleware(mux),
+		Addr:              net.JoinHostPort(s.host, strconv.Itoa(s.port)),
+		Handler:           security.LoopbackHTTP(s.authMiddleware(mux)),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	// Graceful shutdown on SIGINT/SIGTERM.

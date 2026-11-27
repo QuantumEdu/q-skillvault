@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/quantum-6/skillvault/internal/db"
 	"github.com/quantum-6/skillvault/internal/domain"
 	"github.com/quantum-6/skillvault/internal/security"
@@ -83,17 +85,16 @@ func (s *VaultExportService) ExportVault(ctx context.Context, input ExportVaultI
 	if !input.IncludeArtifacts {
 		data.Data.Artifacts = nil
 	}
-
-	jsonBytes, err := json.MarshalIndent(data, "", "  ")
+	jsonBytes, err := encodeSnapshot(data)
 	if err != nil {
-		return fmt.Errorf("marshal export: %w", err)
+		return err
 	}
 
 	path := input.OutputPath
 	if path == "" {
 		path = "skillvault-export.json"
 	}
-	if err := os.WriteFile(path, jsonBytes, 0644); err != nil {
+	if err := os.WriteFile(path, jsonBytes, 0600); err != nil {
 		return fmt.Errorf("write export file: %w", err)
 	}
 
@@ -112,15 +113,17 @@ func (s *VaultImportService) ImportWithPrefix(ctx context.Context, path string, 
 // and imports its contents. If strictAudit is true, the payload is audited first
 // and import is rejected if critical or high severity security findings exist.
 func (s *VaultImportService) ImportWithPrefixAndAudit(ctx context.Context, path string, prefix string, strictAudit bool) error {
+	return s.ImportFile(ctx, path, prefix, false, strictAudit)
+}
+
+// ImportFile imports a snapshot, optionally requiring the skill pack envelope.
+func (s *VaultImportService) ImportFile(ctx context.Context, path, prefix string, requirePack, strictAudit bool) error {
 	jsonBytes, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read import file: %w", err)
 	}
 
 	if strictAudit {
-		if s.auditor == nil {
-			s.auditor = security.NewAuditor()
-		}
 		report, err := s.auditor.AuditPack(jsonBytes)
 		if err != nil {
 			return fmt.Errorf("security audit pre-check error: %w", err)
@@ -133,12 +136,14 @@ func (s *VaultImportService) ImportWithPrefixAndAudit(ctx context.Context, path 
 	// Detect pack format: try unmarshalling as pack first.
 	var pack domain.VaultPackExport
 	if err := json.Unmarshal(jsonBytes, &pack); err == nil && pack.Pack.PackID != "" {
-		var data domain.VaultExport
-		data = pack.Data
+		data := pack.Data
 		if prefix != "" {
 			applyPrefix(prefix, &data.Data)
 		}
 		return s.ImportVault(ctx, data)
+	}
+	if requirePack {
+		return fmt.Errorf("expected a skill pack with a pack ID")
 	}
 
 	// Fallback: bare VaultExport format (backward compatible).
@@ -155,6 +160,13 @@ func (s *VaultImportService) ImportWithPrefixAndAudit(ctx context.Context, path 
 }
 
 func (s *VaultImportService) ImportVault(ctx context.Context, data domain.VaultExport) error {
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("validate snapshot: %w", err)
+	}
+	if err := security.RejectSecrets(string(encoded)); err != nil {
+		return fmt.Errorf("snapshot import blocked: %w", err)
+	}
 	if err := s.resolveSlugConflicts(ctx, &data); err != nil {
 		return fmt.Errorf("slug conflict resolution: %w", err)
 	}
@@ -210,9 +222,16 @@ func (s *VaultExportService) ExportJSON(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("export: %w", err)
 	}
 
+	return encodeSnapshot(data)
+}
+
+func encodeSnapshot(data domain.VaultExport) ([]byte, error) {
 	jsonBytes, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)
+	}
+	if err := security.RejectSecrets(string(jsonBytes)); err != nil {
+		return nil, fmt.Errorf("snapshot export blocked: %w", err)
 	}
 	return jsonBytes, nil
 }
@@ -231,6 +250,23 @@ func applyPrefix(prefix string, data *domain.VaultData) {
 	if prefix == "" {
 		return
 	}
+	data.ImportNamespace = prefix
+	entryRefs := make(map[string]string, len(data.Entries)*2)
+	for _, entry := range data.Entries {
+		slug := entry.Slug
+		if slug == "" {
+			slug = entry.Title
+		}
+		entryRefs[entry.ID], entryRefs[slug] = prefix+entry.ID, prefix+entry.ID
+	}
+	workflowRefs := make(map[string]string, len(data.Workflows)*2)
+	for _, workflow := range data.Workflows {
+		slug := workflow.Slug
+		if slug == "" {
+			slug = workflow.Name
+		}
+		workflowRefs[workflow.ID], workflowRefs[slug] = prefix+workflow.ID, prefix+workflow.ID
+	}
 	if data.MemoryQuality != nil {
 		quality := make(map[string]domain.MemoryQualityRecord, len(data.MemoryQuality))
 		for id, record := range data.MemoryQuality {
@@ -247,7 +283,32 @@ func applyPrefix(prefix string, data *domain.VaultData) {
 	}
 
 	for i := range data.Entries {
-		data.Entries[i].ID = prefix + data.Entries[i].ID
+		entry := &data.Entries[i]
+		if entry.Slug == "" {
+			entry.Slug = entry.Title
+		}
+		entry.Slug = prefix + entry.Slug
+		entry.ID = prefix + entry.ID
+		if entry.Type == domain.EntryTypeRouting {
+			var routes map[string]RouteTarget
+			if yaml.Unmarshal([]byte(entry.BodyOptional), &routes) == nil {
+				changed := false
+				for scenario, target := range routes {
+					if mapped := workflowRefs[target.Workflow]; mapped != "" {
+						target.Workflow, changed = mapped, true
+					}
+					if mapped := entryRefs[target.Skill]; mapped != "" {
+						target.Skill, changed = mapped, true
+					}
+					routes[scenario] = target
+				}
+				if changed {
+					if body, err := yaml.Marshal(routes); err == nil {
+						entry.BodyOptional = string(body)
+					}
+				}
+			}
+		}
 		if data.Entries[i].ProjectID != nil {
 			newPID := prefix + *data.Entries[i].ProjectID
 			data.Entries[i].ProjectID = &newPID
@@ -259,9 +320,17 @@ func applyPrefix(prefix string, data *domain.VaultData) {
 	}
 	for i := range data.Projects {
 		data.Projects[i].ID = prefix + data.Projects[i].ID
+		if data.Projects[i].Slug == "" {
+			data.Projects[i].Slug = data.Projects[i].Name
+		}
+		data.Projects[i].Slug = prefix + data.Projects[i].Slug
 	}
 	for i := range data.Artifacts {
 		data.Artifacts[i].ID = prefix + data.Artifacts[i].ID
+		if data.Artifacts[i].Slug == "" {
+			data.Artifacts[i].Slug = data.Artifacts[i].Title
+		}
+		data.Artifacts[i].Slug = prefix + data.Artifacts[i].Slug
 		if data.Artifacts[i].ProjectID != nil {
 			newPID := prefix + *data.Artifacts[i].ProjectID
 			data.Artifacts[i].ProjectID = &newPID
@@ -272,14 +341,25 @@ func applyPrefix(prefix string, data *domain.VaultData) {
 		}
 	}
 	for i := range data.Workflows {
-		data.Workflows[i].ID = prefix + data.Workflows[i].ID
+		workflow := &data.Workflows[i]
+		if workflow.Slug == "" {
+			workflow.Slug = workflow.Name
+		}
+		workflow.Slug = prefix + workflow.Slug
+		workflow.ID = prefix + workflow.ID
 	}
 	for i := range data.WorkflowSteps {
 		data.WorkflowSteps[i].WorkflowID = prefix + data.WorkflowSteps[i].WorkflowID
-		data.WorkflowSteps[i].ID = prefix + data.WorkflowSteps[i].ID
+		if mapped := entryRefs[data.WorkflowSteps[i].EntrySlug]; mapped != "" {
+			data.WorkflowSteps[i].EntrySlug = mapped
+		}
 	}
 	for i := range data.Series {
 		data.Series[i].ID = prefix + data.Series[i].ID
+		if data.Series[i].Slug == "" {
+			data.Series[i].Slug = data.Series[i].Name
+		}
+		data.Series[i].Slug = prefix + data.Series[i].Slug
 	}
 	for i := range data.SeriesEntries {
 		data.SeriesEntries[i].SeriesID = prefix + data.SeriesEntries[i].SeriesID
@@ -293,9 +373,11 @@ func applyPrefix(prefix string, data *domain.VaultData) {
 		data.EntryLinks[i].ToEntryID = prefix + data.EntryLinks[i].ToEntryID
 	}
 	for i := range data.WorkflowRuns {
+		data.WorkflowRuns[i].ID = prefix + data.WorkflowRuns[i].ID
 		data.WorkflowRuns[i].WorkflowID = prefix + data.WorkflowRuns[i].WorkflowID
 	}
 	for i := range data.WorkflowRunSteps {
+		data.WorkflowRunSteps[i].ID = prefix + data.WorkflowRunSteps[i].ID
 		data.WorkflowRunSteps[i].RunID = prefix + data.WorkflowRunSteps[i].RunID
 		data.WorkflowRunSteps[i].EntryID = prefix + data.WorkflowRunSteps[i].EntryID
 	}

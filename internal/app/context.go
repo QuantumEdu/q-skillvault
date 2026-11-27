@@ -65,8 +65,10 @@ func (s *ContextService) GetContext(ctx context.Context, input ContextInput) (*C
 	if input.Mode == "" {
 		input.Mode = "project"
 	}
-	if input.ExcludeArchived && input.Include == nil {
-		input.Include = []string{"profile", "decisions", "pending", "workflows", "recent_sessions"}
+	switch input.Mode {
+	case "profile", "project", "workflow", "skill", "planning", "session_recall", "full_brief":
+	default:
+		return nil, fmt.Errorf("unknown context mode %q", input.Mode)
 	}
 	maxChars := input.MaxChars
 	if maxChars <= 0 {
@@ -140,7 +142,7 @@ func (s *ContextService) GetContext(ctx context.Context, input ContextInput) (*C
 	}
 
 	if projectID != "" && (includeSet["decisions"] || includeSet["project_state"]) {
-		decisions := s.collectDecisions(ctx, projectID, input.ExcludeArchived)
+		decisions := s.collectDecisions(ctx, projectID)
 		if decisions != "" {
 			addSection("Active Decisions", decisions)
 		}
@@ -154,14 +156,14 @@ func (s *ContextService) GetContext(ctx context.Context, input ContextInput) (*C
 	}
 
 	if includeSet["workflows"] {
-		workflows := s.collectWorkflows(ctx, input.ExcludeArchived)
+		workflows := s.collectWorkflows(ctx)
 		if workflows != "" {
 			addSection("Relevant Workflows", workflows)
 		}
 	}
 
 	if includeSet["recent_sessions"] {
-		sessions := s.collectRecentSessions(ctx, projectID, input.ExcludeArchived)
+		sessions := s.collectRecentSessions(ctx, projectID)
 		if sessions != "" {
 			addSection("Recent Sessions", sessions)
 		}
@@ -175,13 +177,13 @@ func (s *ContextService) GetContext(ctx context.Context, input ContextInput) (*C
 	}
 
 	if includeSet["references"] {
-		refs := s.collectReferences(ctx, projectID, input.ExcludeArchived)
+		refs := s.collectReferences(ctx, projectID)
 		if refs != "" {
 			addSection("References", refs)
 		}
 	}
 
-	if !input.ExcludeArchived {
+	if includeSet["archived"] && !input.ExcludeArchived {
 		archived := s.collectArchived(ctx, projectID)
 		if archived != "" {
 			addSection("Archived", archived)
@@ -295,11 +297,10 @@ func (s *ContextService) collectProfile(ctx context.Context) string {
 	return b.String()
 }
 
-func (s *ContextService) collectDecisions(ctx context.Context, projectID string, excludeArchived bool) string {
+func (s *ContextService) collectDecisions(ctx context.Context, projectID string) string {
 	filter := domain.EntryFilter{
-		Type:            strPtr("decision"),
-		ProjectID:       &projectID,
-		IncludeArchived: !excludeArchived,
+		Type:      strPtr("decision"),
+		ProjectID: &projectID,
 	}
 	entries, err := s.entryStore.List(ctx, filter)
 	if err != nil {
@@ -317,8 +318,8 @@ func (s *ContextService) collectDecisions(ctx context.Context, projectID string,
 	return b.String()
 }
 
-func (s *ContextService) collectWorkflows(ctx context.Context, excludeArchived bool) string {
-	workflows, err := s.workflowStore.List(ctx, !excludeArchived)
+func (s *ContextService) collectWorkflows(ctx context.Context) string {
+	workflows, err := s.workflowStore.List(ctx, false)
 	if err != nil {
 		return ""
 	}
@@ -347,10 +348,9 @@ func (s *ContextService) collectWorkflows(ctx context.Context, excludeArchived b
 	return b.String()
 }
 
-func (s *ContextService) collectRecentSessions(ctx context.Context, projectID string, excludeArchived bool) string {
+func (s *ContextService) collectRecentSessions(ctx context.Context, projectID string) string {
 	filter := domain.EntryFilter{
-		Type:            strPtr("session"),
-		IncludeArchived: !excludeArchived,
+		Type: strPtr("session"),
 	}
 	if projectID != "" {
 		filter.ProjectID = &projectID
@@ -445,10 +445,9 @@ func (s *ContextService) collectArtifactSummaries(ctx context.Context, projectID
 	return b.String()
 }
 
-func (s *ContextService) collectReferences(ctx context.Context, projectID string, excludeArchived bool) string {
+func (s *ContextService) collectReferences(ctx context.Context, projectID string) string {
 	filter := domain.EntryFilter{
-		Type:            strPtr("reference"),
-		IncludeArchived: !excludeArchived,
+		Type: strPtr("reference"),
 	}
 	if projectID != "" {
 		filter.ProjectID = &projectID

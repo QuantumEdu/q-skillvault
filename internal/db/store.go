@@ -80,6 +80,7 @@ type WorkflowRunStore interface {
 
 type SeriesStore interface {
 	Save(ctx context.Context, s domain.Series) error
+	SaveWithEntries(ctx context.Context, series domain.Series, entries []domain.SeriesEntry) error
 	Get(ctx context.Context, id string, includeArchived bool) (domain.SeriesResult, error)
 	Compose(ctx context.Context, seriesID string) ([]domain.Entry, error)
 	List(ctx context.Context, filter domain.SeriesFilter) ([]domain.SeriesListResult, error)

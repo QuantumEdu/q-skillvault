@@ -6,9 +6,13 @@ import (
 	"fmt"
 
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 func (s *sqliteProjectStore) Save(ctx context.Context, p domain.Project) error {
+	if err := security.RejectSecrets(p.ID, p.Slug, p.Name, p.Description); err != nil {
+		return err
+	}
 	if p.Status == "" {
 		p.Status = domain.StatusActive
 	}

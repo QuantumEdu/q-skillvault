@@ -157,14 +157,26 @@ func runSaveArtifact(ctx context.Context, svc *Services, args []string) {
 		os.Exit(1)
 	}
 
+	content := flags.Content
+	if flags.File != "" {
+		if content != "" {
+			PrintError(fmt.Errorf("choose either --file or --content"))
+			os.Exit(1)
+		}
+		data, err := os.ReadFile(flags.File)
+		if err != nil {
+			PrintError(fmt.Errorf("read artifact file: %w", err))
+			os.Exit(1)
+		}
+		content = string(data)
+	}
 	artifact, err := svc.artifactSvc.SaveArtifact(ctx, app.SaveArtifactInput{
-		Title:    flags.Title,
-		Type:     flags.Type,
-		Content:  flags.Content,
-		FilePath: flags.File,
-		Summary:  flags.Summary,
-		Project:  flags.Project,
-		Tags:     TagItems(flags.Tags),
+		Title:   flags.Title,
+		Type:    flags.Type,
+		Content: content,
+		Summary: flags.Summary,
+		Project: flags.Project,
+		Tags:    TagItems(flags.Tags),
 	})
 	if err != nil {
 		PrintError(err)

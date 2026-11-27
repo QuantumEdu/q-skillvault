@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/quantum-6/skillvault/internal/domain"
@@ -145,13 +146,13 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 			p.Slug = p.Name
 		}
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO projects (id, name, slug, description, status, updated_at)
-			 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			`INSERT INTO projects (id, name, slug, description, status, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
 			 ON CONFLICT(id) DO UPDATE SET
 			 name=excluded.name, slug=excluded.slug,
 			 description=excluded.description, status=excluded.status,
-			 updated_at=CURRENT_TIMESTAMP`,
-			p.ID, p.Name, p.Slug, p.Description, string(p.Status))
+			 created_at=COALESCE(?, projects.created_at), updated_at=COALESCE(?, projects.updated_at)`,
+			p.ID, p.Name, p.Slug, p.Description, string(p.Status), portableTime(p.CreatedAt), portableTime(p.UpdatedAt), portableTime(p.CreatedAt), portableTime(p.UpdatedAt))
 		if err != nil {
 			return fmt.Errorf("import project %s: %w", p.ID, err)
 		}
@@ -234,6 +235,10 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 	}
 
 	for _, a := range data.Data.Artifacts {
+		tags, err := json.Marshal(a.Tags)
+		if err != nil {
+			return err
+		}
 		projectID := interface{}(nil)
 		if a.ProjectID != nil {
 			projectID = *a.ProjectID
@@ -242,17 +247,17 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 		if a.SourceEntryID != nil {
 			sourceEntryID = *a.SourceEntryID
 		}
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO artifacts (id, title, slug, type, file_path, mime_type, summary, content_hash, size_bytes, project_id, source_entry_id, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO artifacts (id, title, slug, type, file_path, mime_type, summary, content_hash, size_bytes, project_id, source_entry_id, tags_json, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 			 ON CONFLICT(id) DO UPDATE SET
 			 title=excluded.title, slug=excluded.slug,
 			 type=excluded.type, file_path=excluded.file_path,
 			 mime_type=excluded.mime_type, summary=excluded.summary,
 			 content_hash=excluded.content_hash, size_bytes=excluded.size_bytes,
-			 project_id=excluded.project_id, source_entry_id=excluded.source_entry_id,
+			 project_id=excluded.project_id, source_entry_id=excluded.source_entry_id, tags_json=excluded.tags_json,
 			 updated_at=CURRENT_TIMESTAMP`,
-			a.ID, a.Title, a.Slug, string(a.Type), a.FilePath, a.MimeType, a.Summary, a.ContentHash, a.SizeBytes, projectID, sourceEntryID)
+			a.ID, a.Title, a.Slug, string(a.Type), a.FilePath, a.MimeType, a.Summary, a.ContentHash, a.SizeBytes, projectID, sourceEntryID, tags)
 		if err != nil {
 			return fmt.Errorf("import artifact %s: %w", a.ID, err)
 		}
@@ -274,16 +279,31 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 		}
 	}
 
+	seriesPositions := make(map[string]int)
 	for _, se := range data.Data.SeriesEntries {
+		seriesPositions[se.SeriesID] = max(seriesPositions[se.SeriesID], se.OrderIndex)
+	}
+	for _, se := range data.Data.SeriesEntries {
+		order := se.OrderIndex
+		if order <= 0 {
+			seriesPositions[se.SeriesID]++
+			order = seriesPositions[se.SeriesID]
+		}
 		_, err := tx.ExecContext(ctx,
-			`INSERT OR REPLACE INTO series_entries (series_id, entry_id, order_index)
-			 VALUES (?, ?, ?)`,
-			se.SeriesID, se.EntryID, se.OrderIndex)
+			`INSERT OR REPLACE INTO series_entries (series_id, entry_id, step_num, order_index)
+			 VALUES (?, ?, ?, ?)`,
+			se.SeriesID, se.EntryID, order, order)
 		if err != nil {
 			return fmt.Errorf("import series_entry %s/%s: %w", se.SeriesID, se.EntryID, err)
 		}
 	}
 
+	stepIDs := make(map[int64]int64)
+	type stepPosition struct {
+		workflowID string
+		orderIndex int
+	}
+	stepOffsets := make(map[stepPosition]int)
 	for _, ws := range data.Data.WorkflowSteps {
 		required := 0
 		if ws.Required {
@@ -293,17 +313,35 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 		if ws.ID != "" {
 			id = ws.ID
 		}
-		_, err := tx.ExecContext(ctx,
+		if data.Data.ImportNamespace != "" {
+			var existing int64
+			position := stepPosition{ws.WorkflowID, ws.OrderIndex}
+			offset := stepOffsets[position]
+			stepOffsets[position]++
+			switch err := tx.QueryRowContext(ctx, "SELECT id FROM workflow_steps WHERE workflow_id = ? AND order_index = ? ORDER BY id LIMIT 1 OFFSET ?", ws.WorkflowID, ws.OrderIndex, offset).Scan(&existing); err {
+			case nil:
+				id = existing
+			case sql.ErrNoRows:
+				id = nil
+			default:
+				return fmt.Errorf("match imported workflow step: %w", err)
+			}
+		}
+		var savedID int64
+		err := tx.QueryRowContext(ctx,
 			`INSERT INTO workflow_steps (id, workflow_id, order_index, title, instruction, required, expected_output, entry_slug)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(id) DO UPDATE SET
 			 workflow_id=excluded.workflow_id, order_index=excluded.order_index,
 			 title=excluded.title, instruction=excluded.instruction,
 			 required=excluded.required, expected_output=excluded.expected_output,
-			 entry_slug=excluded.entry_slug`,
-			id, ws.WorkflowID, ws.OrderIndex, ws.Title, ws.Instruction, required, ws.ExpectedOutput, ws.EntrySlug)
+			 entry_slug=excluded.entry_slug RETURNING id`,
+			id, ws.WorkflowID, ws.OrderIndex, ws.Title, ws.Instruction, required, ws.ExpectedOutput, ws.EntrySlug).Scan(&savedID)
 		if err != nil {
 			return fmt.Errorf("import workflow_step: %w", err)
+		}
+		if sourceID, err := strconv.ParseInt(ws.ID, 10, 64); err == nil {
+			stepIDs[sourceID] = savedID
 		}
 	}
 
@@ -326,6 +364,13 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 	}
 
 	for _, rs := range data.Data.WorkflowRunSteps {
+		if data.Data.ImportNamespace != "" {
+			id, ok := stepIDs[rs.StepID]
+			if !ok {
+				return fmt.Errorf("missing source workflow step %d", rs.StepID)
+			}
+			rs.StepID = id
+		}
 		finishedAt := interface{}(nil)
 		if rs.FinishedAt != nil {
 			finishedAt = *rs.FinishedAt
@@ -372,7 +417,7 @@ func (s *sqliteImportExportStore) ImportAll(ctx context.Context, data domain.Vau
 }
 
 func (s *sqliteImportExportStore) exportProjects(ctx context.Context) ([]domain.Project, error) {
-	rows, err := s.query(ctx, "SELECT id, name, COALESCE(slug,''), COALESCE(description,''), COALESCE(status,'active') FROM projects ORDER BY id")
+	rows, err := s.query(ctx, "SELECT id, name, COALESCE(slug,''), COALESCE(description,''), COALESCE(status,'active'), created_at, updated_at FROM projects ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +523,8 @@ func (s *sqliteImportExportStore) exportSeries(ctx context.Context) ([]domain.Se
 }
 
 func (s *sqliteImportExportStore) exportSeriesEntries(ctx context.Context) ([]domain.SeriesEntry, error) {
-	rows, err := s.query(ctx, `SELECT series_id, entry_id, COALESCE(order_index,0) FROM series_entries ORDER BY series_id, order_index`)
+	rows, err := s.query(ctx, `SELECT series_id, entry_id, COALESCE(NULLIF(order_index,0),step_num) AS position
+		FROM series_entries ORDER BY series_id, position`)
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +585,7 @@ func (s *sqliteImportExportStore) exportWorkflowSteps(ctx context.Context) ([]do
 }
 
 func (s *sqliteImportExportStore) exportArtifacts(ctx context.Context) ([]domain.Artifact, error) {
-	rows, err := s.query(ctx, `SELECT id, title, COALESCE(slug,''), type, COALESCE(file_path,''), COALESCE(mime_type,''), COALESCE(summary,''), COALESCE(content_hash,''), COALESCE(size_bytes,0), project_id, source_entry_id FROM artifacts ORDER BY id`)
+	rows, err := s.query(ctx, `SELECT id, title, COALESCE(slug,''), type, COALESCE(file_path,''), COALESCE(mime_type,''), COALESCE(summary,''), COALESCE(content_hash,''), COALESCE(size_bytes,0), project_id, source_entry_id, tags_json FROM artifacts ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -548,7 +594,8 @@ func (s *sqliteImportExportStore) exportArtifacts(ctx context.Context) ([]domain
 	for rows.Next() {
 		var a domain.Artifact
 		var projID, srcID, summary sql.NullString
-		if err := rows.Scan(&a.ID, &a.Title, &a.Slug, &a.Type, &a.FilePath, &a.MimeType, &summary, &a.ContentHash, &a.SizeBytes, &projID, &srcID); err != nil {
+		var tags string
+		if err := rows.Scan(&a.ID, &a.Title, &a.Slug, &a.Type, &a.FilePath, &a.MimeType, &summary, &a.ContentHash, &a.SizeBytes, &projID, &srcID, &tags); err != nil {
 			return nil, err
 		}
 		if projID.Valid {
@@ -560,6 +607,9 @@ func (s *sqliteImportExportStore) exportArtifacts(ctx context.Context) ([]domain
 		if summary.Valid {
 			a.Summary = summary.String
 		}
+		if err := json.Unmarshal([]byte(tags), &a.Tags); err != nil {
+			return nil, err
+		}
 		results = append(results, a)
 	}
 	return results, rows.Err()
@@ -569,11 +619,18 @@ func scanProjects(rows *sql.Rows) ([]domain.Project, error) {
 	var results []domain.Project
 	for rows.Next() {
 		var p domain.Project
-		var status string
-		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &status); err != nil {
+		var status, created, updated string
+		if err := rows.Scan(&p.ID, &p.Name, &p.Slug, &p.Description, &status, &created, &updated); err != nil {
 			return nil, err
 		}
 		p.Status = domain.Status(status)
+		var err error
+		if p.CreatedAt, err = parseSQLiteTime(created); err != nil {
+			return nil, err
+		}
+		if p.UpdatedAt, err = parseSQLiteTime(updated); err != nil {
+			return nil, err
+		}
 		results = append(results, p)
 	}
 	return results, rows.Err()

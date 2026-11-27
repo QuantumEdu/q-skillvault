@@ -208,7 +208,7 @@ func (r *ToolRegistry) registerV2Tools() {
 			"title":     map[string]interface{}{"type": "string", "description": "Artifact title (required)"},
 			"type":      map[string]interface{}{"type": "string", "description": "Artifact type: ai_output|pdf_analysis|spec|report|session_output|markdown|json|txt"},
 			"content":   map[string]interface{}{"type": "string", "description": "Artifact content (optional if file_path provided)"},
-			"file_path": map[string]interface{}{"type": "string", "description": "Path to file (optional if content provided)"},
+			"file_path": map[string]interface{}{"type": "string", "description": "Existing file inside the vault objects directory (optional if content provided)"},
 			"summary":   map[string]interface{}{"type": "string", "description": "Short summary"},
 			"project":   map[string]interface{}{"type": "string", "description": "Project name or ID"},
 			"tags":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
@@ -221,6 +221,11 @@ func (r *ToolRegistry) registerV2Tools() {
 			"exclude_archived": map[string]interface{}{"type": "boolean", "description": "Exclude archived entries"},
 			"max_chars":        map[string]interface{}{"type": "number", "description": "Maximum characters (default 12000)"},
 		})},
+		{Name: "save_series", Description: "Create a series from ordered entry IDs or slugs", InputSchema: schemaObj(map[string]interface{}{
+			"name":        map[string]interface{}{"type": "string"},
+			"description": map[string]interface{}{"type": "string"},
+			"entry_ids":   map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "minItems": 1},
+		}, "name", "entry_ids")},
 		{Name: "compose_series", Description: "Return ordered entries in a series", InputSchema: schemaObj(map[string]interface{}{
 			"series_id": map[string]interface{}{"type": "string", "description": "Series ID"},
 		})},
@@ -277,7 +282,7 @@ func (r *ToolRegistry) registerV2Tools() {
 			"type":             map[string]interface{}{"type": "string", "description": "Entry type override"},
 			"category":         map[string]interface{}{"type": "string", "description": "Summary/category"},
 			"tags":             map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
-			"project_id":       map[string]interface{}{"type": "string", "description": "Project ID or name"},
+			"project_id":       map[string]interface{}{"type": "string", "description": "Project ID or slug"},
 			"source_prompt_id": map[string]interface{}{"type": "string", "description": "Source prompt entry ID"},
 			"model":            map[string]interface{}{"type": "string", "description": "Model identifier"},
 		})},
@@ -418,6 +423,9 @@ func (r *ToolRegistry) Call(ctx context.Context, name string, args map[string]in
 }
 
 func (r *ToolRegistry) dispatch(ctx context.Context, name string, args map[string]interface{}) (*ToolCallResult, error) {
+	if strings.HasPrefix(name, "mem_") && !r.compatEngram {
+		return nil, fmt.Errorf("unknown tool: %s", name)
+	}
 	switch name {
 	case "save_entry":
 		return r.handleSaveEntry(ctx, args)
@@ -429,6 +437,8 @@ func (r *ToolRegistry) dispatch(ctx context.Context, name string, args map[strin
 		return r.handleSaveArtifact(ctx, args)
 	case "get_context":
 		return r.handleGetContext(ctx, args)
+	case "save_series":
+		return r.handleSaveSeries(ctx, args)
 	case "compose_series":
 		return r.handleComposeSeries(ctx, args)
 	case "render_workflow":
@@ -729,6 +739,20 @@ func (r *ToolRegistry) handleGetContext(ctx context.Context, args map[string]int
 		return errResult("Error: " + err.Error()), nil
 	}
 	return textResult(pack.Raw), nil
+}
+
+func (r *ToolRegistry) handleSaveSeries(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
+	entries := parseStrings(args["entry_ids"])
+	if len(entries) == 0 {
+		return errResult("entry_ids must contain at least one entry"), nil
+	}
+	series, err := r.seriesSvc.SaveSeries(ctx, app.SaveSeriesInput{
+		Name: strArg(args, "name"), Description: strArg(args, "description"), EntryIDs: entries,
+	})
+	if err != nil {
+		return errResult("Error: " + err.Error()), nil
+	}
+	return textResult(fmt.Sprintf("Saved series: %s (%s)", series.ID, series.Slug)), nil
 }
 
 func (r *ToolRegistry) handleComposeSeries(ctx context.Context, args map[string]interface{}) (*ToolCallResult, error) {
@@ -1204,13 +1228,17 @@ func (r *ToolRegistry) handleSaveResult(ctx context.Context, args map[string]int
 		return errResult("Error: save result service not available"), nil
 	}
 
+	project := strArg(args, "project_id")
+	if project == "" {
+		project = strArg(args, "project")
+	}
 	input := app.SavePromptResultInput{
 		Name:           strArg(args, "name"),
 		Content:        strArg(args, "content"),
 		Type:           strArg(args, "type"),
 		Category:       strArg(args, "category"),
 		Tags:           parseStrings(args["tags"]),
-		ProjectID:      strArg(args, "project_id"),
+		ProjectID:      project,
 		SourcePromptID: strArg(args, "source_prompt_id"),
 		Model:          strArg(args, "model"),
 	}

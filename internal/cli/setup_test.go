@@ -88,12 +88,6 @@ func TestInitThenOpenVault(t *testing.T) {
 	if svc.saveResultSvc == nil {
 		t.Error("saveResultSvc is nil")
 	}
-	if svc.fileSvc == nil {
-		t.Error("fileSvc is nil")
-	}
-	if svc.scanner == nil {
-		t.Error("scanner is nil")
-	}
 }
 
 func TestInitIsIdempotent(t *testing.T) {

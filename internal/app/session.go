@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/quantum-6/skillvault/internal/db"
 	"github.com/quantum-6/skillvault/internal/domain"
@@ -24,30 +23,12 @@ type SessionWrapOutput struct {
 }
 
 type SessionService struct {
-	entryService    *EntryService
+	store           *db.Store
 	artifactService *ArtifactService
-	projectService  *ProjectService
-	entryStore      db.EntryStore
-	artifactStore   db.ArtifactStore
-	projectStore    db.ProjectStore
 }
 
-func NewSessionService(
-	entryService *EntryService,
-	artifactService *ArtifactService,
-	projectService *ProjectService,
-	entryStore db.EntryStore,
-	artifactStore db.ArtifactStore,
-	projectStore db.ProjectStore,
-) *SessionService {
-	return &SessionService{
-		entryService:    entryService,
-		artifactService: artifactService,
-		projectService:  projectService,
-		entryStore:      entryStore,
-		artifactStore:   artifactStore,
-		projectStore:    projectStore,
-	}
+func NewSessionService(store *db.Store, artifactService *ArtifactService) *SessionService {
+	return &SessionService{store: store, artifactService: artifactService}
 }
 
 func (s *SessionService) SessionWrap(ctx context.Context, input SessionWrapInput) (*SessionWrapOutput, error) {
@@ -57,7 +38,7 @@ func (s *SessionService) SessionWrap(ctx context.Context, input SessionWrapInput
 
 	var projectID *string
 	if input.Project != "" {
-		proj, err := s.projectStore.Get(ctx, input.Project)
+		proj, err := s.store.Projects.Get(ctx, input.Project)
 		if err != nil {
 			return nil, fmt.Errorf("project %q not found: %w", input.Project, err)
 		}
@@ -84,11 +65,11 @@ func (s *SessionService) SessionWrap(ctx context.Context, input SessionWrapInput
 		}
 	}
 
-	slug := "ses-" + generateSessionID()
+	id := generateSessionID()
 	entry := domain.Entry{
-		ID:           generateSessionID(),
+		ID:           id,
 		Title:        "Session: " + truncate(input.Summary, 60),
-		Slug:         slug,
+		Slug:         id,
 		Type:         domain.EntryTypeSession,
 		Summary:      input.Summary,
 		BodyOptional: sessionBody,
@@ -96,50 +77,35 @@ func (s *SessionService) SessionWrap(ctx context.Context, input SessionWrapInput
 		ProjectID:    projectID,
 	}
 
-	if err := s.entryStore.Save(ctx, entry, nil); err != nil {
-		return nil, fmt.Errorf("save session entry: %w", err)
-	}
-
 	var artifact *domain.Artifact
-	if len(input.Artifacts) > 0 {
-		artifactList := make([]string, 0, len(input.Artifacts))
-		for _, aID := range input.Artifacts {
-			a, err := s.artifactStore.Get(ctx, aID)
-			if err == nil {
-				artifactList = append(artifactList, a.Title)
-			}
+	if len(input.Artifacts) == 0 {
+		if err := s.store.Entries.Save(ctx, entry, nil); err != nil {
+			return nil, fmt.Errorf("save session entry: %w", err)
 		}
-		if len(artifactList) > 0 {
-			body := sessionBody + "\n\n## Linked Artifacts\n"
-			for _, t := range artifactList {
-				body += fmt.Sprintf("- %s\n", t)
+	} else {
+		body := sessionBody + "\n\n## Linked Artifacts\n"
+		for _, artifactID := range input.Artifacts {
+			linked, err := s.store.Artifacts.Get(ctx, artifactID)
+			if err != nil {
+				return nil, fmt.Errorf("resolve linked artifact: %w", err)
 			}
-
-			a := domain.Artifact{
-				ID:            generateArtifactID(),
-				Title:         "Session Output: " + truncate(input.Summary, 60),
-				Slug:          "sess-out-" + generateSessionID(),
-				Type:          domain.ArtifactTypeSessionOutput,
-				FilePath:      "objects/sessions/" + slug + ".md",
-				MimeType:      "text/markdown",
-				Summary:       input.Summary,
-				SizeBytes:     int64(len(body)),
-				ProjectID:     projectID,
-				SourceEntryID: &entry.ID,
-			}
-			if err := s.artifactStore.Save(ctx, a); err != nil {
-				return nil, fmt.Errorf("save session artifact: %w", err)
-			}
-			artifact = &a
-
-			entry.ArtifactID = &a.ID
-			if err := s.entryStore.Save(ctx, entry, nil); err != nil {
-				return nil, fmt.Errorf("update entry with artifact link: %w", err)
-			}
+			body += fmt.Sprintf("- %s (%s)\n", linked.Title, linked.ID)
+		}
+		metadata := domain.Artifact{
+			ID: generateArtifactID(), Title: "Session Output: " + truncate(input.Summary, 60),
+			Slug: "sess-out-" + id, Type: domain.ArtifactTypeSessionOutput,
+			MimeType: "text/markdown", Summary: input.Summary, ProjectID: projectID, SourceEntryID: &entry.ID,
+		}
+		var err error
+		artifact, err = s.artifactService.persistContent(metadata, []byte(body), func(a domain.Artifact) error {
+			return s.store.SaveSessionWithArtifact(ctx, entry, a)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("save session artifact: %w", err)
 		}
 	}
 
-	result, err := s.entryStore.Get(ctx, entry.ID, true)
+	result, err := s.store.Entries.Get(ctx, entry.ID, true)
 	if err != nil {
 		return nil, fmt.Errorf("get saved session: %w", err)
 	}
@@ -156,21 +122,4 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
-}
-
-func (s SessionWrapInput) summaryLine() string {
-	parts := make([]string, 0, 3)
-	if s.Summary != "" {
-		parts = append(parts, s.Summary)
-	}
-	if len(s.Decisions) > 0 {
-		parts = append(parts, fmt.Sprintf("%d decisions", len(s.Decisions)))
-	}
-	if len(s.Pending) > 0 {
-		parts = append(parts, fmt.Sprintf("%d pending", len(s.Pending)))
-	}
-	if len(s.Learnings) > 0 {
-		parts = append(parts, fmt.Sprintf("%d learnings", len(s.Learnings)))
-	}
-	return strings.Join(parts, " | ")
 }

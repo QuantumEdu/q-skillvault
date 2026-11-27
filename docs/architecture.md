@@ -61,7 +61,7 @@ flowchart TD
 | Layer | Module | Key Files | Responsibility |
 |:---:|:---|:---|:---|
 | 1 | Episodic Memory & Quality | `internal/app/vault_mem.go`, `internal/db/memory_quality.go` | SHA-256 dedupe O(1), supersession, lifecycle hints, `StripPrivateTags`, `mem promote` |
-| 2 | Context Compiler | `internal/context/compiler.go` | 7 adaptive modes, token-aware truncation, priority-based section ranking, pending injection |
+| 2 | Context Compiler | `internal/app/context.go` | Context modes, configurable sections and character budget, pending item summaries |
 | 3 | Workflows & Pipelines | `internal/app/workflows.go`, `workflow_runs.go` | YAML import, DAG execution, `route_scenario`, step analytics |
 | 4 | Productivity & Handoffs | `internal/app/instruction.go`, `link.go`, `session.go` | `cmd`/instructions, URL bookmarks, pending items, session wrap, agent handoffs |
 | 5 | Agentic Telemetry | `internal/agenttelemetry/` | Loop detection, token counting, injection detection, entropy scanning, telemetryd daemon |
@@ -87,7 +87,7 @@ cmd/skillvault/main.go
     │
     └── internal/db/      → Persistence (SQLite + FTS5)
     └── internal/files/   → Persistence (filesystem)
-    └── internal/context/ → Compiler (Qu@ntum)
+    └── internal/app/context.go → Context compiler
     └── internal/security/→ Scanner (secrets)
 ```
 

@@ -306,7 +306,7 @@ func runImport(ctx context.Context, svc *Services, args []string) {
 		os.Exit(1)
 	}
 
-	if err := svc.importSvc.ImportWithPrefix(ctx, flags.FilePath, flags.Prefix); err != nil {
+	if err := svc.importSvc.ImportFile(ctx, flags.FilePath, flags.Prefix, flags.Pack, flags.StrictAudit); err != nil {
 		PrintError(err)
 		os.Exit(1)
 	}

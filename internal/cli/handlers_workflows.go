@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/quantum-6/skillvault/internal/app"
+	"github.com/quantum-6/skillvault/internal/domain"
 )
 
 func runAddWorkflow(ctx context.Context, svc *Services, args []string) {
@@ -99,6 +100,10 @@ func runRun(ctx context.Context, svc *Services, args []string) {
 	run, output, err := svc.workflowRunSvc.RunPipeline(ctx, flags.Workflow, input, os.Stdin, os.Stdout)
 	if err != nil {
 		PrintError(err)
+		os.Exit(1)
+	}
+	if run.Status != domain.RunStatusCompleted {
+		PrintError(fmt.Errorf("run %s failed; check workflow run details", run.ID))
 		os.Exit(1)
 	}
 

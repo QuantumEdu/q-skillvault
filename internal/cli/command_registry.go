@@ -50,8 +50,8 @@ var topLevelCommands = []CommandMeta{
 	{ID: "link-project", DisplayName: "link-project", Description: "Link this project to the vault by writing a SkillVault marker into its AGENTS.md", Aliases: []string{"project link", "link project"}, Group: "Context", Usage: "skillvault link-project --project <slug-or-id> [--path <dir>]", Examples: []string{"skillvault link-project --project myapp", "skillvault link-project --project myapp --path /home/user/code/myapp"}, Intent: []string{"link project to vault", "make project discoverable", "install skillvault in project"}, Related: []string{"add-project", "list-projects", "get-context", "search"}, Notes: []string{"Idempotent: re-running replaces the marked section instead of duplicating it.", "Only the marked section is written; existing AGENTS.md content outside the markers is preserved."}, Suggested: "link-project"},
 	{ID: "list-projects", DisplayName: "list-projects", Description: "List projects in the vault", Aliases: []string{"projects", "project list", "show projects"}, Group: "Context", Intent: []string{"show projects", "browse projects"}, Suggested: "projects", ReadOnly: true, SafeFuzzy: true},
 	{ID: "pending", DisplayName: "pending", Description: "Capture, review, and resolve per-project pending items", Aliases: []string{"todo"}, Group: "Context", Usage: "skillvault pending add --project myapp \"Update presentation\"", Examples: []string{"skillvault pending add --project myapp \"Update presentation\"", "skillvault pending list --project myapp --query review", "skillvault pending review --project myapp", "skillvault pending show update-presentation", "skillvault pending done update-presentation"}, Intent: []string{"save deferred work", "review pending items", "show todo details", "mark todo done"}, Related: []string{"add-project", "search", "archive"}, Notes: []string{"Pending items are stored as normal entries with type `pending` and purpose `WORK`.", "Use `pending review` for a project-scoped review pass and `pending show <id>` for a single item.", "Active project pending items appear in the default context pack and can be requested explicitly with `--include pending`."}, Suggested: "pending"},
-	{ID: "link", DisplayName: "link", Description: "Store and retrieve URL bookmarks with keyword aliases for quick paste into agents", Aliases: []string{"bookmark", "links", "url"}, Group: "Find", Usage: "skillvault link add <url> --alias <alias> [--tags tag1,tag2]", Examples: []string{"skillvault link add https://github.com/charmbracelet/bubbletea --alias btea --tags go,tui", "skillvault link get btea", "skillvault link get btea --copy", "skillvault link search tui", "skillvault link list"}, Intent: []string{"store url", "bookmark link", "get link url", "copy link to clipboard", "search bookmarks"}, Related: []string{"search", "add-entry"}, Notes: []string{"Alias is stored as a tag prefix alias:<value> for FTS5 search.", "Use --copy with `link get` to write the URL to the system clipboard.", "Supported clipboard tools: xclip, wl-copy, pbcopy, clip."}, Suggested: "link", SafeFuzzy: true},
-	{ID: "cmd", DisplayName: "cmd", Description: "Store and retrieve command snippets and instruction recipes with variable interpolation", Aliases: []string{"instruction", "snippet", "recipe"}, Group: "Find", Usage: "skillvault cmd add \"<command>\" --alias <alias> [--title <title>] [--tags tag1,tag2]", Examples: []string{"skillvault cmd add \"ffmpeg -i {{input}} -vcodec libx264 -crf {{crf}} {{output}}\" --alias ff-compress --tags video,ffmpeg", "skillvault cmd get ff-compress --var input=raw.mov --var crf=28 --var output=out.mp4 --copy", "skillvault cmd search rebase", "skillvault cmd list"}, Intent: []string{"save command", "store snippet", "run instruction", "copy command", "search recipes"}, Related: []string{"link", "search", "add-entry"}, Notes: []string{"Placeholders like {{input}} are detected and interpolated automatically using internal/vars.", "Use --copy to write the resolved command directly to system clipboard.", "Supports WSL native clipboard (clip.exe), wl-copy, xclip, pbcopy."}, Suggested: "cmd", SafeFuzzy: true},
+	{ID: "link", DisplayName: "link", Description: "Store and retrieve URL bookmarks with keyword aliases for quick paste into agents", Aliases: []string{"bookmark", "links", "url"}, Group: "Find", Usage: "skillvault link add <url> --alias <alias> [--tags tag1,tag2]", Examples: []string{"skillvault link add https://github.com/charmbracelet/bubbletea --alias btea --tags go,tui", "skillvault link get btea", "skillvault link get btea --copy", "skillvault link search tui", "skillvault link list"}, Intent: []string{"store url", "bookmark link", "get link url", "copy link to clipboard", "search bookmarks"}, Related: []string{"search", "add-entry"}, Notes: []string{"Alias is stored as a tag prefix alias:<value> for FTS5 search.", "Use --copy with `link get` to write the URL to the system clipboard.", "Supported clipboard tools: xclip, wl-copy, pbcopy, clip."}, Suggested: "link"},
+	{ID: "cmd", DisplayName: "cmd", Description: "Store and retrieve command snippets and instruction recipes with variable interpolation", Aliases: []string{"instruction", "snippet", "recipe"}, Group: "Find", Usage: "skillvault cmd add \"<command>\" --alias <alias> [--title <title>] [--tags tag1,tag2]", Examples: []string{"skillvault cmd add \"ffmpeg -i {{input}} -vcodec libx264 -crf {{crf}} {{output}}\" --alias ff-compress --tags video,ffmpeg", "skillvault cmd get ff-compress --var input=raw.mov --var crf=28 --var output=out.mp4 --copy", "skillvault cmd search rebase", "skillvault cmd list"}, Intent: []string{"save command", "store snippet", "run instruction", "copy command", "search recipes"}, Related: []string{"link", "search", "add-entry"}, Notes: []string{"Placeholders like {{input}} are detected and interpolated automatically using internal/vars.", "Use --copy to write the resolved command directly to system clipboard.", "Supports WSL native clipboard (clip.exe), wl-copy, xclip, pbcopy."}, Suggested: "cmd"},
 	{ID: "session-wrap", DisplayName: "session-wrap", Description: "Save a session summary with decisions and pending items", Aliases: []string{"session"}, Group: "Context"},
 	{ID: "mem", DisplayName: "mem", Description: "Episodic observation memory and Engram-compatible persistence", Aliases: []string{"memory", "episodic"}, Group: "Context", Usage: "skillvault mem [save|search|get|timeline|context|promote|checkpoint|resume] [args...]", Examples: []string{"skillvault mem save \"Fixed N+1 query in loader\" --type bugfix --project codex", "skillvault mem search \"query\" --project codex", "skillvault mem timeline obs-123", "skillvault mem context --project codex"}, Intent: []string{"save memory", "search observations", "episodic context", "engram replacement"}, Related: []string{"get-context", "search", "session-wrap"}, Notes: []string{"Native episodic memory with automatic normalized hash deduplication.", "Compatible with Engram observation schema and topics."}, Suggested: "mem save"},
 	{ID: "add-workflow", DisplayName: "add-workflow", Description: "Create a workflow from a JSON definition file", Group: "Workflows"},
@@ -76,11 +76,11 @@ var topLevelCommands = []CommandMeta{
 	{ID: "mcp", DisplayName: "mcp", Description: "Start the MCP JSON-RPC 2.0 server over stdio", Group: "Integrations"},
 	{ID: "mcp-config", DisplayName: "mcp config", Description: "Print a ready-to-paste MCP client config snippet", Aliases: []string{"mcp-config", "setup mcp", "mcp setup"}, Group: "Integrations", Usage: "skillvault mcp config", Examples: []string{"skillvault mcp config", "skillvault setup mcp"}, Intent: []string{"configure mcp", "wire opencode", "show mcp snippet"}, Related: []string{"init", "doctor", "mcp"}, Notes: []string{"Read-only: it prints JSON to stdout and does not touch opencode.json or Claude config files."}, Suggested: "mcp config", ReadOnly: true, SafeFuzzy: true},
 	{ID: "http", DisplayName: "http", Description: "Start HTTP REST API server on 127.0.0.1:7438", Group: "Integrations"},
-	{ID: "tui", DisplayName: "tui", Description: "Start the Bubble Tea terminal UI for project overview and pending review", Group: "Integrations", Usage: "skillvault tui", Examples: []string{"make build-tui && ./skillvault-tui tui", "go build -tags tui -o skillvault-tui ./cmd/skillvault && ./skillvault-tui tui"}, Intent: []string{"browse projects interactively", "review pending work in tui", "open terminal ui"}, Related: []string{"list-projects", "pending", "get-context", "search"}, Notes: []string{"The TUI stays intentionally light: it shows projects, pending items, entry browsing, and a compact context preview.", "From the pending pane you can mark one item done with confirmation; this reuses the same archive semantics as `skillvault pending done`.", "Default builds keep the TUI disabled behind the `tui` build tag. Without that tag, `skillvault tui` prints the rebuild hint and exits."}, SafeFuzzy: true},
+	{ID: "tui", DisplayName: "tui", Description: "Start the Bubble Tea terminal UI for project overview and pending review", Group: "Integrations", Usage: "skillvault tui", Examples: []string{"make build-tui && ./skillvault-tui tui", "go build -tags tui -o skillvault-tui ./cmd/skillvault && ./skillvault-tui tui"}, Intent: []string{"browse projects interactively", "review pending work in tui", "open terminal ui"}, Related: []string{"list-projects", "pending", "get-context", "search"}, Notes: []string{"The TUI stays intentionally light: it shows projects, pending items, entry browsing, and a compact context preview.", "From the pending pane you can mark one item done with confirmation; this reuses the same archive semantics as `skillvault pending done`.", "Default builds keep the TUI disabled behind the `tui` build tag. Without that tag, `skillvault tui` prints the rebuild hint and exits."}},
 	{ID: "secrets", DisplayName: "secrets", Description: "Run q-secrets or install it via 'secrets install'", Aliases: []string{"q-secrets"}, Group: "Integrations"},
 	{ID: "audit", DisplayName: "audit", Description: "Run security audit against vault entries, markdown files, or skill packs", Group: "Maintenance", Usage: "skillvault audit [target] [--pack <path>] [--format text|json|sarif] [--fail-on critical|high|medium]", Examples: []string{"skillvault audit", "skillvault audit my-skill.md", "skillvault audit --pack pack.svpack", "skillvault audit --format sarif"}, Intent: []string{"security audit", "scan skills", "detect prompt injection", "check secrets"}, Related: []string{"import", "doctor"}, Suggested: "audit", ReadOnly: true, SafeFuzzy: true},
 	{ID: "mcp-audit", DisplayName: "mcp audit", Description: "Scan client MCP configuration files for exposed secrets and security hazards", Aliases: []string{"mcp audit", "mcp-audit"}, Group: "Integrations", Usage: "skillvault mcp audit [--all] [--config <path>] [--format text|json]", Examples: []string{"skillvault mcp audit --all", "skillvault mcp audit --config ~/.cursor/mcp.json"}, Intent: []string{"audit mcp config", "scan cursor mcp", "check claude config"}, Related: []string{"mcp-config", "secrets", "audit"}, Suggested: "mcp audit", ReadOnly: true, SafeFuzzy: true},
-	{ID: "mcp-register", DisplayName: "mcp register", Description: "Automatically register SkillVault MCP server in client configuration files", Aliases: []string{"mcp register", "mcp-register", "mcp install", "mcp-install", "register mcp"}, Group: "Integrations", Usage: "skillvault mcp register [--client all|gemini|opencode|codex|claude|cursor] [--path <custom-config>]", Examples: []string{"skillvault mcp register", "skillvault mcp register --client opencode", "skillvault mcp register --client gemini"}, Intent: []string{"register mcp server", "install mcp", "connect agent mcp"}, Related: []string{"mcp-config", "mcp-audit", "mcp"}, Notes: []string{"Idempotent: updates existing entry without duplicating or corrupting other servers.", "Supports OpenCode, Gemini, Codex, Claude Desktop, and Cursor."}, Suggested: "mcp register", SafeFuzzy: true},
+	{ID: "mcp-register", DisplayName: "mcp register", Description: "Automatically register SkillVault MCP server in client configuration files", Aliases: []string{"mcp register", "mcp-register", "mcp install", "mcp-install", "register mcp"}, Group: "Integrations", Usage: "skillvault mcp register [--client all|gemini|opencode|codex|claude|cursor] [--path <custom-config>]", Examples: []string{"skillvault mcp register", "skillvault mcp register --client opencode", "skillvault mcp register --client gemini"}, Intent: []string{"register mcp server", "install mcp", "connect agent mcp"}, Related: []string{"mcp-config", "mcp-audit", "mcp"}, Notes: []string{"Idempotent: updates existing entry without duplicating or corrupting other servers.", "Supports OpenCode, Gemini, Codex, Claude Desktop, and Cursor."}, Suggested: "mcp register"},
 	{ID: "sync-engram", DisplayName: "sync-engram", Description: "Import observations from an Engram persistent memory database into the vault", Aliases: []string{"sync-engram", "sync engram", "import-engram", "engram-sync"}, Group: "Integrations", Usage: "skillvault sync-engram [--db <path>] [--project <project>] [--dry-run]", Examples: []string{"skillvault sync-engram", "skillvault sync-engram --dry-run", "skillvault sync-engram --project codex"}, Intent: []string{"import from engram", "sync persistent memory", "merge engram into skillvault"}, Related: []string{"import", "search", "doctor"}, Notes: []string{"Idempotent: uses external_ref markers to avoid duplicating imported memories."}, Suggested: "sync-engram"},
 }
 
@@ -220,22 +220,17 @@ func fuzzyTopLevelCommand(part string) (string, bool) {
 		return "", false
 	}
 
-	var best CommandMeta
-	bestScore := 0
+	var match string
 	for _, command := range topLevelCommands {
-		if !command.SafeFuzzy {
+		if !command.ReadOnly || !command.SafeFuzzy || !oneEditAliasMatch(query, command) {
 			continue
 		}
-		score := bestDirectAliasMatch(query, command)
-		if score > bestScore {
-			bestScore = score
-			best = command
+		if match != "" {
+			return "", false
 		}
+		match = command.ID
 	}
-	if bestScore < 35 {
-		return "", false
-	}
-	return best.ID, true
+	return match, match != ""
 }
 
 // NormalizeArgs rewrites intent aliases and nested commands to canonical command IDs.
@@ -390,14 +385,13 @@ func bestCommandMatch(query string, command CommandMeta) (int, string) {
 	return bestScore, bestTerm
 }
 
-func bestDirectAliasMatch(query string, command CommandMeta) int {
-	bestScore := 0
+func oneEditAliasMatch(query string, command CommandMeta) bool {
 	for _, term := range append([]string{command.ID, command.DisplayName}, command.Aliases...) {
-		if score := scoreCommandTerm(query, term); score > bestScore {
-			bestScore = score
+		if levenshteinDistance(query, normalizeCommandKey(term)) == 1 {
+			return true
 		}
 	}
-	return bestScore
+	return false
 }
 
 func suggestionMatchHint(input string, command CommandMeta) string {
@@ -422,9 +416,7 @@ func commandTerms(command CommandMeta) []string {
 		terms = append(terms, command.Suggested)
 	}
 	for _, phrase := range append(append([]string{}, command.Aliases...), command.Intent...) {
-		for _, token := range strings.Fields(normalizeCommandKey(strings.ReplaceAll(phrase, "-", " "))) {
-			terms = append(terms, token)
-		}
+		terms = append(terms, strings.Fields(normalizeCommandKey(strings.ReplaceAll(phrase, "-", " ")))...)
 	}
 	return terms
 }

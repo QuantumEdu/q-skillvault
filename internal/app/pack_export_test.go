@@ -159,8 +159,10 @@ func TestPackImportWithPrefix(t *testing.T) {
 	if len(exported.Data.EntryVersions) != 1 || exported.Data.EntryVersions[0].EntryID != "ns/pref-entry" || !strings.HasPrefix(exported.Data.EntryVersions[0].VersionID, "ns/") {
 		t.Fatalf("pack lost namespaced history: %+v", exported.Data.EntryVersions)
 	}
-	// The original slug is unchanged, so Get by unprefixed string still
-	// works (it matches the slug). Verify the ID is correctly prefixed.
+	// Both identifiers are scoped to the imported namespace.
+	if result.Entry.Slug != "ns/pref-entry" {
+		t.Fatalf("prefixed slug = %q", result.Entry.Slug)
+	}
 	if result.Entry.ID != "ns/pref-entry" {
 		t.Errorf("expected prefixed ID 'ns/pref-entry', got %q", result.Entry.ID)
 	}

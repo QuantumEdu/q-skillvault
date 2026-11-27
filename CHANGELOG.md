@@ -158,14 +158,14 @@ migration would copy duplicates into a store that could not resolve them.
   - `skillvault mem timeline`: Retrieve surrounding chronological observations (`--before`, `--after`) around an observation ID.
   - `skillvault mem context`: Compile a ready-to-inject markdown context pack of active memories for AI agents.
 - **Glama Cloud Deployment & Container Bootstrapping**:
-  - Added production [`Dockerfile`](file:///home/informatica/dev/kbs/Dockerfile), [`.dockerignore`](file:///home/informatica/dev/kbs/.dockerignore), and [`glama.json`](file:///home/informatica/dev/kbs/glama.json) for 1-click MCP cloud hosting.
+  - Added production [`Dockerfile`](Dockerfile), [`.dockerignore`](.dockerignore), and [`glama.json`](glama.json) for 1-click MCP cloud hosting.
   - Added container-safe directory creation in `internal/db/migrate.go` (`os.MkdirAll`) ensuring SQLite WAL initializes reliably in ephemeral filesystems without pre-existing `~/.skillvault` folders.
   - Added `SKILLVAULT_HOME` environment override support in `internal/cli/deps.go`.
 - **`line` Factory Sibling** (`cmd/line`, `internal/line`):
   - Deterministic issue-to-PR jobs with SQLite (`~/.line/line.db`).
   - Phases: `plan` → `build` → `review` → `wait_ci` → `ready`, with automatic repair on CI failure (budget 3).
   - Optional ntfy notifications on `needs_human`, `blocked`, or `ready`.
-  - Local web dashboard: `line serve` on `127.0.0.1:7340` ([`docs/line.md`](file:///home/informatica/dev/kbs/docs/line.md)).
+  - Local web dashboard: `line serve` on `127.0.0.1:7340` ([`docs/line.md`](docs/line.md)).
 - **Submodule Hardening**:
   - Synchronized `q-secrets` submodule to `origin/master` (`aaaa939`) with process signal preservation and security hardening.
 
@@ -209,7 +209,7 @@ migration would copy duplicates into a store that could not resolve them.
 
 - **Bidirectional Multi-Device Sync Engine (`skillvault-sync`)**:
   - Dedicated zero-dependency synchronization and merge engine for SkillVault (`tools/skillvault-sync/skillvault_sync.py`).
-  - Conforms to the private backup repository standard [`QuantumEdu/skill-vault-backp`](https://github.com/QuantumEdu/skill-vault-backp).
+  - Conforms to the private backup repository standard configured private backup repository.
   - Subcommands: `skillvault-sync status`, `init`, `pull`, `snapshot`, `unify`, `apply`, `sync`.
   - **Two-Way Merge (True Sync)**: Reconciles entries and projects concurrently modified across machines using **Last-Write-Wins (LWW)** on ISO `updated_at` timestamps, set union of tags and graph edges, and slug conflict resolution.
   - **Atomic Snapshots**: Consistent non-blocking snapshots using SQLite `VACUUM INTO` to prevent WAL lock contention (`SQLITE_BUSY`).

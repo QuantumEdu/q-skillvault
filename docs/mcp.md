@@ -1,6 +1,6 @@
-# MCP Server — 41 native tools for AI agents
+# MCP Server — 42 native tools for AI agents
 
-With `--compat-engram`, five optional aliases bring the total to 46 tools.
+With `--compat-engram`, five optional aliases bring the total to 47 tools.
 
 SkillVault runs as an MCP (Model Context Protocol) server over stdio JSON-RPC 2.0. This lets agents like Claude Code, OpenCode, or any MCP client read and write directly to your vault.
 
@@ -52,7 +52,7 @@ When the binary runs as `mcp` (via the symlink name), it enters MCP mode directl
 ```bash
 skillvault mcp
 # Waits for stdio JSON-RPC connections. Test with:
-echo '{"jsonrpc":"2.0","id":1,"method":"list_projects","params":{}}' | skillvault mcp
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}' | skillvault mcp
 ```
 
 ---
@@ -68,7 +68,7 @@ Save any type of entry in the vault.
 - `type` (string, required) — Type: `prompt`, `skill`, `workflow_note`, `reference`, `user`, `feedback`, `project_state`, `session`, `decision`, `artifact_summary`, `handoff`, `routing`
 - `summary` (string, required) — Summary
 - `body` (string, optional) — Long-form content
-- `project` (string, optional) — Project slug
+- `project_id` (string, optional) — Project ID or slug. `project` is an alias.
 - `tags` (string[], optional) — Tags
 - `status` (string, optional) — `draft`, `active`, `archived`, `deprecated`, `canonical`
 - `purpose` (string, optional) — LifeOS-aligned purpose: `WORK`, `KNOWLEDGE`, `LEARNING`, `RELATIONSHIP`, `STATE`, `OBSERVABILITY`
@@ -131,12 +131,12 @@ Save a large filesystem-backed artifact.
 
 **Parameters:**
 - `title` (string, required) — Title
-- `type` (string, required) — Artifact type
-- `content` (string, required) — Full content
+- `type` (string, optional) — Artifact type (default: `markdown`)
+- `content` (string) or `file_path` (string) — Provide exactly one. File paths must point into the vault’s `objects/` directory.
 - `project` (string, optional) — Project
 - `tags` (string[], optional) — Tags
 
-**How it works:** content is written to `~/.skillvault/objects/YYYY/MM/<slug>.<ext>` with a SHA256 hash. Metadata (title, type, slug, date) goes to SQLite. Ideal for long AI outputs, PDF analyses, reports, etc.
+**How it works:** content is written to `~/.skillvault/objects/YYYY/MM/<artifact-id>.<ext>` with a SHA256 hash. Metadata (title, type, slug, date) goes to SQLite. Ideal for long AI outputs, PDF analyses, reports, etc.
 
 ---
 
@@ -147,10 +147,10 @@ Save an AI prompt result as a vault entry.
 **Parameters:**
 - `name` (string, required) — Result name (generates slug)
 - `content` (string, required) — Result content
-- `type` (string, optional) — Entry type (default: `ai_output`)
+- `type` (string, optional) — Entry type (default: `prompt`)
 - `category` (string, optional) — Optional category
 - `tags` (string[], optional) — Tags
-- `project` (string, optional) — Project slug
+- `project_id` (string, optional) — Project ID or slug. `project` is an alias.
 - `source_prompt_id` (string, optional) — ID of the prompt entry that generated this result
 - `model` (string, optional) — Model that generated the result
 
@@ -161,14 +161,18 @@ Save an AI prompt result as a vault entry.
 Compile an agent-ready context pack.
 
 **Parameters:**
-- `mode` (string, required) — `profile`, `project`, `workflow`, `skill`, `planning`, `session_recall`, `full_brief`
+- `mode` (string, optional, defaults to `project`) — `profile`, `project`, `workflow`, `skill`, `planning`, `session_recall`, `full_brief`
 - `project` (string, required) — Project
-- `max_chars` (int, optional) — Max characters (default: 10000)
-- `include` (string[], optional) — Filter specific sections
+- `max_chars` (int, optional) — Max characters (default: 12000)
+- `include` (string[], optional) — Filter specific sections. Add `archived` explicitly to include archived entries in a separate section.
 
 **Response:** structured text with prioritized sections. Designed for direct injection into the agent's prompt.
 
 ---
+
+### `save_series`
+
+Create a global series from an ordered array of global entries. Pass `name`, `entry_ids` (entry IDs or slugs), and optionally `description`. Use the returned ID or slug with `compose_series`.
 
 ### `compose_series`
 
@@ -321,7 +325,7 @@ Search entries by tags using intersection (all) or union (any).
 Get a structured project context bundle in a single call.
 
 **Parameters:**
-- `project` (string, optional) — Project slug
+- `project_id` (string, optional) — Project ID or slug. `project` is an alias.
 
 **Response:** structured JSON with project info, entries grouped by type, and artifact references.
 
@@ -473,6 +477,24 @@ Restore an entry to a previous version by version number. The current state is p
 ```
 
 ---
+
+### Links, instructions, handoffs and memory
+
+| Tool | Arguments and behavior |
+|---|---|
+| `add_link` | `url` must be an absolute HTTP(S) URL. Optional `alias`, `title`, `summary`, `tags`, `project`. |
+| `get_link` | Resolve a bookmark by `alias`. |
+| `list_links` | List bookmarks, optionally filtered by `project`. |
+| `search_links` | Search bookmarks by `query` with optional `project` and `limit`. |
+| `add_instruction` | Save `command` and `alias`, with optional `title`, `summary`, `tags`, and `project`. |
+| `get_instruction` | Resolve a recipe by `alias`, optionally interpolating a `vars` object. |
+| `list_instructions` | List recipes, optionally filtered by `project`. |
+| `search_instructions` | Search recipes by `query`, with optional `project` and `limit`. |
+| `save_handoff` | Save a `task_id` and `step_summary`, optionally with `project`, `artifacts_produced`, `next_steps`, or `blocking_issues`. |
+| `get_handoff` | Retrieve the most recent handoff, optionally filtered by `task_id` or `project`. |
+| `vault_mem_save`, `vault_mem_search`, `vault_mem_get`, `vault_mem_timeline`, `vault_mem_context` | Native memory write, search, lookup, timeline and context tools. See [memory commands](commands.md#mem-save--mem-search--mem-get--mem-timeline--mem-context). |
+| `vault_session_checkpoint`, `vault_session_resume` | Native session continuity. See [session continuity](#native-session-continuity-v380). |
+| `mem_save`, `mem_search`, `mem_get_observation`, `mem_timeline`, `mem_context` | Engram-compatible aliases advertised when `--compat-engram` or `SKILLVAULT_COMPAT_ENGRAM=1` is enabled. |
 
 ## Typical Agent Flow
 

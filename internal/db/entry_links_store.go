@@ -7,9 +7,13 @@ import (
 	"strings"
 
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 func (s *sqliteEntryLinkStore) Save(ctx context.Context, link domain.EntryLink) error {
+	if err := security.RejectSecrets(link.Label); err != nil {
+		return err
+	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO entry_links (from_entry_id, to_entry_id, relation_type, label, active)
 		VALUES (?, ?, ?, ?, 1)

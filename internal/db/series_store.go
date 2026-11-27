@@ -6,9 +6,34 @@ import (
 	"fmt"
 
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 func (s *sqliteSeriesStore) Save(ctx context.Context, series domain.Series) error {
+	return saveSeries(ctx, s.db, series)
+}
+
+func (s *sqliteSeriesStore) SaveWithEntries(ctx context.Context, series domain.Series, entries []domain.SeriesEntry) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := saveSeries(ctx, tx, series); err != nil {
+		return err
+	}
+	if err := replaceSeriesEntries(ctx, tx, series.ID, entries); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func saveSeries(ctx context.Context, db interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, series domain.Series) error {
+	if err := security.RejectSecrets(series.ID, series.Name, series.Slug, series.Description); err != nil {
+		return err
+	}
 	if series.Status == "" {
 		series.Status = domain.StatusActive
 	}
@@ -16,7 +41,7 @@ func (s *sqliteSeriesStore) Save(ctx context.Context, series domain.Series) erro
 		series.Slug = series.Name
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := db.ExecContext(ctx, `
 		INSERT INTO series (id, name, slug, description, status, updated_at)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
@@ -62,7 +87,7 @@ func (s *sqliteSeriesStore) Get(ctx context.Context, id string, includeArchived 
 	}
 	query += " ORDER BY se.order_index"
 
-	rows, err := s.db.QueryContext(ctx, query, id)
+	rows, err := s.db.QueryContext(ctx, query, result.Series.ID)
 	if err != nil {
 		return result, fmt.Errorf("get series entries: %w", err)
 	}
@@ -89,9 +114,10 @@ func (s *sqliteSeriesStore) Compose(ctx context.Context, seriesID string) ([]dom
 		SELECT e.id, e.title, e.slug, e.type, e.summary, e.body_optional, e.status, e.project_id, e.artifact_id
 		FROM series_entries se
 		JOIN entries e ON e.id = se.entry_id
-		WHERE se.series_id = ?
+		JOIN series s ON s.id = se.series_id
+ WHERE (s.id = ? OR s.slug = ?) AND s.status != 'archived' AND e.status != 'archived'
 		ORDER BY se.order_index
-	`, seriesID)
+	`, seriesID, seriesID)
 	if err != nil {
 		return nil, fmt.Errorf("compose series: %w", err)
 	}
@@ -177,6 +203,13 @@ func (s *sqliteSeriesStore) ReplaceSeriesEntries(ctx context.Context, seriesID s
 	}
 	defer tx.Rollback()
 
+	if err := replaceSeriesEntries(ctx, tx, seriesID, entries); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func replaceSeriesEntries(ctx context.Context, tx *sql.Tx, seriesID string, entries []domain.SeriesEntry) error {
 	if _, err := tx.ExecContext(ctx, "DELETE FROM series_entries WHERE series_id = ?", seriesID); err != nil {
 		return fmt.Errorf("delete old entries: %w", err)
 	}
@@ -195,5 +228,5 @@ func (s *sqliteSeriesStore) ReplaceSeriesEntries(ctx context.Context, seriesID s
 		}
 	}
 
-	return tx.Commit()
+	return nil
 }

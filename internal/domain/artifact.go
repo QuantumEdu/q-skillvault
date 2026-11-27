@@ -5,7 +5,7 @@ import "time"
 type ArtifactType string
 
 const (
-	ArtifactTypeMarkdown     ArtifactType = "markdown"
+	ArtifactTypeMarkdown      ArtifactType = "markdown"
 	ArtifactTypeJSON          ArtifactType = "json"
 	ArtifactTypeTXT           ArtifactType = "txt"
 	ArtifactTypeHTML          ArtifactType = "html"
@@ -38,6 +38,7 @@ type Artifact struct {
 	Summary       string
 	ContentHash   string
 	SizeBytes     int64
+	Tags          []string `json:",omitempty"`
 	ProjectID     *string
 	SourceEntryID *string
 	CreatedAt     time.Time

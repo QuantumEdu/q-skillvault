@@ -3,12 +3,23 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/quantum-6/skillvault/internal/domain"
 )
 
 func (s *sqliteArtifactStore) Save(ctx context.Context, a domain.Artifact) error {
+	return saveArtifact(ctx, s.db, a)
+}
+
+func saveArtifact(ctx context.Context, exec interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, a domain.Artifact) error {
+	tags, err := json.Marshal(a.Tags)
+	if err != nil {
+		return err
+	}
 	projectID := interface{}(nil)
 	if a.ProjectID != nil {
 		projectID = *a.ProjectID
@@ -18,9 +29,9 @@ func (s *sqliteArtifactStore) Save(ctx context.Context, a domain.Artifact) error
 		sourceEntryID = *a.SourceEntryID
 	}
 
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO artifacts (id, title, slug, type, file_path, mime_type, summary, content_hash, size_bytes, project_id, source_entry_id, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	_, err = exec.ExecContext(ctx, `
+		INSERT INTO artifacts (id, title, slug, type, file_path, mime_type, summary, content_hash, size_bytes, project_id, source_entry_id, tags_json, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			title=excluded.title,
 			slug=excluded.slug,
@@ -32,8 +43,9 @@ func (s *sqliteArtifactStore) Save(ctx context.Context, a domain.Artifact) error
 			size_bytes=excluded.size_bytes,
 			project_id=excluded.project_id,
 			source_entry_id=excluded.source_entry_id,
+			tags_json=excluded.tags_json,
 			updated_at=CURRENT_TIMESTAMP
-	`, a.ID, a.Title, a.Slug, string(a.Type), a.FilePath, a.MimeType, a.Summary, a.ContentHash, a.SizeBytes, projectID, sourceEntryID)
+	`, a.ID, a.Title, a.Slug, string(a.Type), a.FilePath, a.MimeType, a.Summary, a.ContentHash, a.SizeBytes, projectID, sourceEntryID, tags)
 	if err != nil {
 		return fmt.Errorf("save artifact: %w", err)
 	}
@@ -43,12 +55,13 @@ func (s *sqliteArtifactStore) Save(ctx context.Context, a domain.Artifact) error
 func (s *sqliteArtifactStore) Get(ctx context.Context, id string) (domain.Artifact, error) {
 	var a domain.Artifact
 	var projID, srcID, summary sql.NullString
+	var tags string
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, title, slug, type, file_path, mime_type, summary, content_hash, size_bytes, project_id, source_entry_id
+		SELECT id, title, slug, type, file_path, mime_type, summary, content_hash, size_bytes, project_id, source_entry_id, tags_json
 		FROM artifacts WHERE id = ? OR slug = ?
 	`, id, id).Scan(&a.ID, &a.Title, &a.Slug, &a.Type, &a.FilePath, &a.MimeType,
-		&summary, &a.ContentHash, &a.SizeBytes, &projID, &srcID)
+		&summary, &a.ContentHash, &a.SizeBytes, &projID, &srcID, &tags)
 	if err == sql.ErrNoRows {
 		return a, fmt.Errorf("artifact %q not found", id)
 	}
@@ -65,11 +78,14 @@ func (s *sqliteArtifactStore) Get(ctx context.Context, id string) (domain.Artifa
 	if summary.Valid {
 		a.Summary = summary.String
 	}
+	if err := json.Unmarshal([]byte(tags), &a.Tags); err != nil {
+		return a, err
+	}
 	return a, nil
 }
 
 func (s *sqliteArtifactStore) List(ctx context.Context, projectID *string) ([]domain.Artifact, error) {
-	query := "SELECT id, title, slug, type, file_path, mime_type, COALESCE(summary,''), content_hash, size_bytes, project_id, source_entry_id FROM artifacts WHERE 1=1"
+	query := "SELECT id, title, slug, type, file_path, mime_type, COALESCE(summary,''), content_hash, size_bytes, project_id, source_entry_id, tags_json FROM artifacts WHERE 1=1"
 	var args []interface{}
 
 	if projectID != nil {
@@ -88,8 +104,9 @@ func (s *sqliteArtifactStore) List(ctx context.Context, projectID *string) ([]do
 	for rows.Next() {
 		var a domain.Artifact
 		var projID, srcID, summary sql.NullString
+		var tags string
 		if err := rows.Scan(&a.ID, &a.Title, &a.Slug, &a.Type, &a.FilePath, &a.MimeType,
-			&summary, &a.ContentHash, &a.SizeBytes, &projID, &srcID); err != nil {
+			&summary, &a.ContentHash, &a.SizeBytes, &projID, &srcID, &tags); err != nil {
 			return nil, fmt.Errorf("scan artifact: %w", err)
 		}
 		if projID.Valid {
@@ -101,11 +118,14 @@ func (s *sqliteArtifactStore) List(ctx context.Context, projectID *string) ([]do
 		if summary.Valid {
 			a.Summary = summary.String
 		}
+		if err := json.Unmarshal([]byte(tags), &a.Tags); err != nil {
+			return nil, err
+		}
 		results = append(results, a)
 	}
 
 	if results == nil {
 		results = []domain.Artifact{}
 	}
-	return results, nil
+	return results, rows.Err()
 }

@@ -87,7 +87,7 @@ var auditRules = []auditRule{
 		severity:    "critical",
 		description: "Known API key or service token detected in plaintext",
 		suggestion:  "Store credentials using q-secrets or environment variables",
-		re:          regexp.MustCompile(`(sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16})`),
+		re:          regexp.MustCompile(`(sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}|(?i:(?:AKIA|ASIA)[0-9A-Z]{16}))`),
 	},
 	{
 		id:          "SEC-002",
@@ -306,28 +306,35 @@ func (a *Auditor) AuditPack(data []byte) (AuditReport, error) {
 func (a *Auditor) auditExportData(baseReport AuditReport, export domain.VaultExport) (AuditReport, error) {
 	report := baseReport
 
-	// Scan entries
-	for _, entry := range export.Data.Entries {
+	scan := func(target string, fields ...string) {
 		report.ScannedItems++
-		contentToScan := entry.Title + "\n" + entry.Summary + "\n" + entry.BodyOptional
-		sub := a.AuditContent(fmt.Sprintf("entry:%s (%s)", entry.ID, entry.Slug), contentToScan)
+		sub := a.AuditContent(target, strings.Join(fields, "\n"))
 		report.Findings = append(report.Findings, sub.Findings...)
 		report.CriticalCount += sub.CriticalCount
 		report.HighCount += sub.HighCount
 		report.MediumCount += sub.MediumCount
 		report.LowCount += sub.LowCount
 	}
-
-	// Scan workflows
+	for _, entry := range export.Data.Entries {
+		scan("entry", entry.Title, entry.Summary, entry.BodyOptional, entry.ExternalRef)
+	}
+	for _, entry := range export.Data.EntryVersions {
+		scan("entry version", entry.Title, entry.Summary, entry.BodyOptional)
+	}
 	for _, wf := range export.Data.Workflows {
-		report.ScannedItems++
-		contentToScan := wf.Name + "\n" + wf.Description
-		sub := a.AuditContent(fmt.Sprintf("workflow:%s", wf.ID), contentToScan)
-		report.Findings = append(report.Findings, sub.Findings...)
-		report.CriticalCount += sub.CriticalCount
-		report.HighCount += sub.HighCount
-		report.MediumCount += sub.MediumCount
-		report.LowCount += sub.LowCount
+		scan("workflow", wf.Name, wf.Description)
+	}
+	for _, step := range export.Data.WorkflowSteps {
+		scan("workflow step", step.Title, step.Instruction, step.ExpectedOutput)
+	}
+	for _, project := range export.Data.Projects {
+		scan("project", project.Name, project.Description)
+	}
+	for _, series := range export.Data.Series {
+		scan("series", series.Name, series.Description)
+	}
+	for _, artifact := range export.Data.Artifacts {
+		scan("artifact", artifact.Title, artifact.Summary)
 	}
 
 	report.Passed = report.CriticalCount == 0 && report.HighCount == 0
@@ -344,7 +351,7 @@ func (a *Auditor) scanEntropyTokens(content string) []Finding {
 		line := scanner.Text()
 		words := strings.Fields(line)
 		for _, w := range words {
-			clean := strings.Trim(w, `"',;:[]{}()<>=` )
+			clean := strings.Trim(w, `"',;:[]{}()<>=`)
 			if len(clean) < a.minEntropyLen {
 				continue
 			}

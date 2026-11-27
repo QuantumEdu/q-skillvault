@@ -44,7 +44,6 @@ func TestDirectoriesExist(t *testing.T) {
 		"internal/api",
 		"internal/files",
 		"internal/security",
-		"internal/context",
 	}
 	for _, d := range required {
 		cmd := exec.Command("test", "-d", d)
@@ -67,6 +66,46 @@ func TestVersionCommand(t *testing.T) {
 	if string(out) != expected {
 		t.Errorf("unexpected version output: %q", string(out))
 	}
+}
+
+func TestVaultAuditRegressions(t *testing.T) {
+	bin := buildSkillvaultBinary(t)
+	vault := t.TempDir()
+	run := func(want string, success bool, args ...string) string {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "SKILLVAULT_HOME="+vault)
+		out, err := cmd.CombinedOutput()
+		if (err == nil) != success || !strings.Contains(string(out), want) {
+			t.Fatalf("%s: got %v and %s, want success=%t and %q", args[0], err, out, success, want)
+		}
+		return string(out)
+	}
+	run("initialized", true, "init")
+	value := "ghp_" + strings.Repeat("z", 36)
+	out := run("known credential detected", false, "add-entry", "--title", "Credential test", "--type", "skill", "--summary", "fixture", "--body", value)
+	if strings.Contains(out, value) {
+		t.Fatal("save error echoed the credential")
+	}
+	run("unknown command", false, "list-workflows")
+
+	snapshot := filepath.Join(t.TempDir(), "snapshot.json")
+	content := `{"schema_version":4,"data":{"entries":[{"ID":"history-test","Title":"History test","Slug":"history-test","Type":"skill","BodyOptional":"current body"}],"entry_versions":[{"version_id":"old","entry_id":"history-test","version_number":1,"title":"History test","summary":"original summary","body_optional":"original body"}]}}`
+	if err := os.WriteFile(snapshot, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	run("expected a skill pack", false, "import", snapshot, "--pack")
+	run("Import completed", true, "import", snapshot)
+	run("Version history for entry", true, "entry", "history", "history-test")
+	run("Restored entry", true, "entry", "restore", "history-test", "--version", "1")
+	run("original summary", true, "read", "history-test")
+
+	content = strings.Replace(content, "current body", "system override", 1)
+	if err := os.WriteFile(snapshot, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	run("import blocked by --strict-audit", false, "import", snapshot, "--strict-audit")
+	run("original summary", true, "read", "history-test")
 }
 
 func TestImportWorkflowCommand(t *testing.T) {

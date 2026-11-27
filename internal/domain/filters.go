@@ -24,6 +24,7 @@ type VaultExport struct {
 }
 
 type VaultData struct {
+	ImportNamespace  string            `json:"-"`
 	Projects         []Project         `json:"projects"`
 	Entries          []Entry           `json:"entries"`
 	EntryTags        []EntryTag        `json:"entry_tags"`
