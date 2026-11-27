@@ -103,16 +103,9 @@ func (s *VaultExportService) ExportVault(ctx context.Context, input ExportVaultI
 }
 
 func writePrivateExport(path string, data []byte) error {
-	info, err := os.Lstat(path)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if err == nil && info.Mode()&os.ModeSymlink != 0 {
-		resolved, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			return fmt.Errorf("resolve export destination: %w", err)
-		}
-		path = resolved
+	path, err := resolveExportPath(path)
+	if err != nil {
+		return fmt.Errorf("resolve export destination: %w", err)
 	}
 
 	file, err := os.CreateTemp(filepath.Dir(path), ".skillvault-export-*")
@@ -128,6 +121,41 @@ func writePrivateExport(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(file.Name(), path)
+}
+
+// Resolve links at the output path while allowing the final file to be absent.
+func resolveExportPath(path string) (string, error) {
+	for range 255 {
+		dir, name := filepath.Split(path)
+		info, err := os.Lstat(path)
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+		if os.IsNotExist(err) || info.Mode()&os.ModeSymlink == 0 {
+			if dir == "" {
+				return path, nil
+			}
+			resolvedDir, err := filepath.EvalSymlinks(dir)
+			if err != nil {
+				return "", err
+			}
+			return filepath.Join(resolvedDir, name), nil
+		}
+
+		target, err := os.Readlink(path)
+		if err != nil {
+			return "", err
+		}
+		if target == "" {
+			return "", fmt.Errorf("empty symbolic link target")
+		}
+		if filepath.VolumeName(target) == "" && !os.IsPathSeparator(target[0]) {
+			// Preserve ".." until the preceding path components have been resolved.
+			target = dir + target
+		}
+		path = target
+	}
+	return "", fmt.Errorf("too many symbolic links")
 }
 
 func (s *VaultImportService) Import(ctx context.Context, path string) error {

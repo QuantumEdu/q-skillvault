@@ -146,26 +146,36 @@ func TestPackExportUpdatesSymlinkDestination(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
-	if err := exportSvc.ExportPack(context.Background(), ExportPackInput{OutputPath: link}); err != nil {
-		t.Fatal(err)
+	checkExport := func(t *testing.T) {
+		t.Helper()
+		if err := exportSvc.ExportPack(context.Background(), ExportPackInput{OutputPath: link}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Readlink(link); err != nil {
+			t.Fatalf("export path must remain a symlink: %v", err)
+		}
+		data, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !json.Valid(data) {
+			t.Fatal("symlink destination was not updated with the pack")
+		}
+		info, err := os.Stat(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+			t.Fatalf("export permissions = %o, want 0600", info.Mode().Perm())
+		}
 	}
-	if _, err := os.Readlink(link); err != nil {
-		t.Fatalf("export path must remain a symlink: %v", err)
-	}
-	data, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !json.Valid(data) {
-		t.Fatal("symlink destination was not updated with the pack")
-	}
-	info, err := os.Stat(target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
-		t.Fatalf("export permissions = %o, want 0600", info.Mode().Perm())
-	}
+	t.Run("existing destination", checkExport)
+	t.Run("new destination", func(t *testing.T) {
+		if err := os.Remove(target); err != nil {
+			t.Fatal(err)
+		}
+		checkExport(t)
+	})
 }
 
 func TestPackImportWithPrefix(t *testing.T) {
