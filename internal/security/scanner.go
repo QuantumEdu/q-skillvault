@@ -26,7 +26,7 @@ type secretPattern struct {
 }
 
 var patterns = []secretPattern{
-	{regexp.MustCompile(`sk-[A-Za-z0-9_-]{20,}`), "openai_api_key"},
+	{regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}`), "openai_api_key"},
 	{regexp.MustCompile(`-----BEGIN (RSA |EC |OPENSSH |)?PRIVATE KEY-----`), "private_key"},
 	{regexp.MustCompile(`ghp_[A-Za-z0-9_]{20,}`), "github_token"},
 	{regexp.MustCompile(`xox[baprs]-[A-Za-z0-9-]{20,}`), "slack_token"},

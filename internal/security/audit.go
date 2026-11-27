@@ -87,7 +87,7 @@ var auditRules = []auditRule{
 		severity:    "critical",
 		description: "Known API key or service token detected in plaintext",
 		suggestion:  "Store credentials using q-secrets or environment variables",
-		re:          regexp.MustCompile(`(sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}|(?i:(?:AKIA|ASIA)[0-9A-Z]{16}))`),
+		re:          regexp.MustCompile(`(\bsk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}|(?i:(?:AKIA|ASIA)[0-9A-Z]{16}))`),
 	},
 	{
 		id:          "SEC-002",

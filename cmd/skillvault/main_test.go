@@ -82,6 +82,7 @@ func TestVaultAuditRegressions(t *testing.T) {
 		return string(out)
 	}
 	run("initialized", true, "init")
+	run("disk-space-monitoring-guide", true, "add-entry", "--title", "Disk Space Monitoring Guide", "--type", "skill", "--summary", "Disk usage guidance")
 	value := "ghp_" + strings.Repeat("z", 36)
 	out := run("known credential detected", false, "add-entry", "--title", "Credential test", "--type", "skill", "--summary", "fixture", "--body", value)
 	if strings.Contains(out, value) {
