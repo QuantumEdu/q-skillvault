@@ -221,4 +221,10 @@ func TestComposeSeriesKeepsDuplicateSlugsSeparate(t *testing.T) {
 	if got, err := series.Compose(ctx, "second"); err != nil || len(got) != 1 || got[0].ID != "second" {
 		t.Fatalf("exact ID yielded %+v, %v", got, err)
 	}
+	if err := series.Save(ctx, domain.Series{ID: "first", Slug: "same", Name: "Same", Status: domain.StatusArchived}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := series.Compose(ctx, "same"); err != nil || len(got) != 1 || got[0].ID != "second" {
+		t.Fatalf("slug with a single unarchived series yielded %+v, %v", got, err)
+	}
 }
