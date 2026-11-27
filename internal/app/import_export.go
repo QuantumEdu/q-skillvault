@@ -108,7 +108,16 @@ func writePrivateExport(path string, data []byte) error {
 		return fmt.Errorf("resolve export destination: %w", err)
 	}
 
-	file, err := os.CreateTemp(filepath.Dir(path), ".skillvault-export-*")
+	// Split preserves the raw directory so CreateTemp and Rename use the
+	// same filesystem path rules, including ".." through directory links.
+	dir, name := filepath.Split(path)
+	if dir == "" {
+		dir = "."
+	} else if dir == filepath.VolumeName(dir) && name != "" {
+		// Keep drive-relative Windows paths on the drive's current directory.
+		dir += "."
+	}
+	file, err := os.CreateTemp(dir, ".skillvault-export-*")
 	if err != nil {
 		return err
 	}
@@ -126,20 +135,12 @@ func writePrivateExport(path string, data []byte) error {
 // Resolve links at the output path while allowing the final file to be absent.
 func resolveExportPath(path string) (string, error) {
 	for range 255 {
-		dir, name := filepath.Split(path)
 		info, err := os.Lstat(path)
 		if err != nil && !os.IsNotExist(err) {
 			return "", err
 		}
 		if os.IsNotExist(err) || info.Mode()&os.ModeSymlink == 0 {
-			if dir == "" {
-				return path, nil
-			}
-			resolvedDir, err := filepath.EvalSymlinks(dir)
-			if err != nil {
-				return "", err
-			}
-			return filepath.Join(resolvedDir, name), nil
+			return path, nil
 		}
 
 		target, err := os.Readlink(path)
@@ -150,7 +151,8 @@ func resolveExportPath(path string) (string, error) {
 			return "", fmt.Errorf("empty symbolic link target")
 		}
 		if filepath.VolumeName(target) == "" && !os.IsPathSeparator(target[0]) {
-			// Preserve ".." until the preceding path components have been resolved.
+			// Let the filesystem interpret ".." and directory links.
+			dir, _ := filepath.Split(path)
 			target = dir + target
 		}
 		path = target

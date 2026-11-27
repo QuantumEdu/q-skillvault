@@ -178,6 +178,49 @@ func TestPackExportUpdatesSymlinkDestination(t *testing.T) {
 	})
 }
 
+func TestPrivateExportUsesNativeDirectoryResolution(t *testing.T) {
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "other", "nested")
+	if err := os.MkdirAll(nested, 0700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "directory-link")
+	if err := os.Symlink(nested, link); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	separator := string(os.PathSeparator)
+	path := link + separator + ".." + separator + "export.json"
+	if err := os.WriteFile(path, []byte("old"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePrivateExport(path, []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "new" {
+		t.Fatalf("export read via the original path = %q, %v", data, err)
+	}
+}
+
+func TestPrivateExportSupportsLongPaths(t *testing.T) {
+	dir := t.TempDir()
+	for range 4 {
+		dir = filepath.Join(dir, strings.Repeat("d", 70))
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "export.json")
+	if err := writePrivateExport(path, []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "new" {
+		t.Fatalf("long-path export = %q, %v", data, err)
+	}
+}
+
 func TestPackImportWithPrefix(t *testing.T) {
 	exportSvc, store, cleanup := setupPackExportService(t)
 	defer cleanup()
