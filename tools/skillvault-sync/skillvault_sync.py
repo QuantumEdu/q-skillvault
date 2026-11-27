@@ -529,6 +529,12 @@ def utc_timestamp(value):
     if value:
         try:
             stamp = value[:-1] + "+00:00" if value.endswith("Z") else value
+            # Python 3.10 requires exactly three or six fractional digits.
+            stamp = re.sub(
+                r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})[.,]([0-9]+)",
+                lambda match: match[1] + "." + match[2][:6].ljust(6, "0"),
+                stamp,
+            )
             parsed = datetime.datetime.fromisoformat(stamp)
             if parsed.tzinfo is None:
                 return parsed.replace(tzinfo=datetime.timezone.utc)
