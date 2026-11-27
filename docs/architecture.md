@@ -169,13 +169,11 @@ Cada archivo tiene hash SHA256. La metadata vive en SQLite.
 ### Save Entry
 
 ```
-CLI/MCP llama a SaveEntryService
+CLI/MCP llama a EntryService
   → ValidateEntry() (domain)
-  → SecretScanner.Scan(content) (security)
-    → si detecta secreto → rechaza o redacta
   → EntryStore.Save() (db)
-  → TagStore.EnsureTags() (db)
-  → EntryLinkStore.Save() (db, si hay links)
+    → RejectSecrets() (security)
+    → guarda entrada y etiquetas
   → return id
 ```
 
@@ -193,18 +191,17 @@ CLI/MCP llama a GetContextService
 ### Save Artifact
 
 ```
-CLI/MCP llama a SaveArtifactService
-  → detecta MIME type
-  → genera slug + extensión
-  → escribe archivo en objects/YYYY/MM/<slug>.<ext>
+CLI/MCP llama a ArtifactService
+  → valida tipo y revisa contenido y metadata con RejectSecrets()
+  → escribe archivo en objects/YYYY/MM/<id>.<ext>
   → calcula SHA256 hash
   → guarda metadata en ArtifactStore (db)
-  → guarda entrada tipo artifact_summary en EntryStore
+  → si falla la escritura en SQLite, elimina el archivo
 ```
 
 ---
 
-## Qu@ntum Context Compiler (`internal/context/`)
+## Compilación de contexto (`internal/app/context.go`)
 
 7 modos de compilación:
 

@@ -129,7 +129,7 @@ skillvault cmd search "ffmpeg"      # Búsqueda FTS5 en recetas y comandos
 skillvault cmd list                 # Listado de comandos y sus placeholders
 
 # Sincronización bidireccional y respaldo multi-máquina (Sync & Backup)
-skillvault-sync status              # Estado y diferencias local vs GitHub (skill-vault-backp)
+skillvault-sync status              # Estado y diferencias con el remoto configurado
 skillvault-sync sync                # Sincronización completa (Pull + Merge LWW + Apply + Push)
 skillvault-sync snapshot            # Snapshot atómico (VACUUM INTO) y subida a GitHub
 skillvault-sync pull                # Descargar últimos commits remotos
