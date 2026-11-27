@@ -57,6 +57,12 @@ func saveSeries(ctx context.Context, db interface {
 	return nil
 }
 
+// Prefer exact IDs and resolve a slug only when it identifies a single series.
+const seriesIDByReference = `COALESCE(
+	(SELECT id FROM series WHERE id = ?),
+	(SELECT MIN(id) FROM series WHERE slug = ? HAVING COUNT(*) = 1)
+)`
+
 func (s *sqliteSeriesStore) Get(ctx context.Context, id string, includeArchived bool) (domain.SeriesResult, error) {
 	var result domain.SeriesResult
 	var description sql.NullString
@@ -64,8 +70,7 @@ func (s *sqliteSeriesStore) Get(ctx context.Context, id string, includeArchived 
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, name, slug, description, status
-		FROM series WHERE id = ? OR slug = ?
-	`, id, id).Scan(&result.Series.ID, &result.Series.Name, &result.Series.Slug,
+		FROM series WHERE id = `+seriesIDByReference, id, id).Scan(&result.Series.ID, &result.Series.Name, &result.Series.Slug,
 		&description, &status)
 	if err == sql.ErrNoRows {
 		return result, fmt.Errorf("series %q not found", id)
@@ -115,7 +120,7 @@ func (s *sqliteSeriesStore) Compose(ctx context.Context, seriesID string) ([]dom
 		FROM series_entries se
 		JOIN entries e ON e.id = se.entry_id
 		JOIN series s ON s.id = se.series_id
- WHERE (s.id = ? OR s.slug = ?) AND s.status != 'archived' AND e.status != 'archived'
+		WHERE s.id = `+seriesIDByReference+` AND s.status != 'archived' AND e.status != 'archived'
 		ORDER BY se.order_index
 	`, seriesID, seriesID)
 	if err != nil {

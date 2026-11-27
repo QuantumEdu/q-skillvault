@@ -202,3 +202,23 @@ func TestComposeSeries(t *testing.T) {
 		t.Errorf("entries[2].ID = %q, want 'e3'", entries[2].ID)
 	}
 }
+
+func TestComposeSeriesKeepsDuplicateSlugsSeparate(t *testing.T) {
+	entries, series, cleanup := setupSeriesStore(t)
+	defer cleanup()
+	ctx := context.Background()
+	for _, id := range []string{"first", "second"} {
+		if err := entries.Save(ctx, domain.Entry{ID: id, Title: id, Type: domain.EntryTypeSkill}, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := series.SaveWithEntries(ctx, domain.Series{ID: id, Slug: "same", Name: "Same"}, []domain.SeriesEntry{{EntryID: id}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err := series.Compose(ctx, "same"); err != nil || len(got) != 0 {
+		t.Fatalf("ambiguous slug yielded %+v, %v", got, err)
+	}
+	if got, err := series.Compose(ctx, "second"); err != nil || len(got) != 1 || got[0].ID != "second" {
+		t.Fatalf("exact ID yielded %+v, %v", got, err)
+	}
+}
