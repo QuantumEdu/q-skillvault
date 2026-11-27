@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -181,8 +182,9 @@ func (s *WorkflowRunService) RunPipeline(
 
 		// Update step with response
 		if err := s.workflowRunStore.UpdateStepStatus(ctx, currentRunStep.ID, domain.RunStatusCompleted, response); err != nil {
-			s.workflowRunStore.UpdateRunStatus(ctx, runID, domain.RunStatusFailed, err.Error())
-			return nil, "", fmt.Errorf("step %q: update completed: %w", rs.step.Title, err)
+			stepErr := s.workflowRunStore.UpdateStepStatus(ctx, currentRunStep.ID, domain.RunStatusFailed, "")
+			runErr := s.workflowRunStore.UpdateRunStatus(ctx, runID, domain.RunStatusFailed, "")
+			return nil, "", fmt.Errorf("step %q: update completed: %w", rs.step.Title, errors.Join(err, stepErr, runErr))
 		}
 
 		previousOutput = response
@@ -332,9 +334,9 @@ func (s *WorkflowRunService) RunPipelineStructured(
 
 		// Update step with response
 		if err := s.workflowRunStore.UpdateStepStatus(ctx, runSteps[i].ID, domain.RunStatusCompleted, response); err != nil {
-			s.workflowRunStore.UpdateRunStatus(ctx, runID, domain.RunStatusFailed, err.Error())
+			stepErr := s.workflowRunStore.UpdateStepStatus(ctx, runSteps[i].ID, domain.RunStatusFailed, "")
 			currentStep.Status = domain.RunStatusFailed
-			currentStep.Error = err.Error()
+			currentStep.Error = errors.Join(err, stepErr).Error()
 			anyFailed = true
 			break
 		}
