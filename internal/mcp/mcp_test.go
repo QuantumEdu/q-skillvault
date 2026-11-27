@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/quantum-6/skillvault/internal/app"
 	"github.com/quantum-6/skillvault/internal/db"
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/files"
 
 	_ "modernc.org/sqlite"
 )
@@ -28,13 +30,17 @@ func setupMCPServices(t *testing.T) (*ToolRegistry, *app.ProjectService, func())
 	store := db.NewStore(sqlDB)
 
 	entrySvc := app.NewEntryService(store.Entries, store.Projects, store.Artifacts)
-	artifactSvc := app.NewArtifactService(store.Artifacts, store.Entries, store.Projects)
+	fileSvc, err := files.NewArtifactFileService(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactSvc := app.NewArtifactService(store.Artifacts, store.Entries, store.Projects, fileSvc)
 	workflowSvc := app.NewWorkflowService(store.Workflows)
 	seriesSvc := app.NewSeriesService(store.Series, store.Entries)
 	projectSvc := app.NewProjectService(store.Projects)
 	entryRefSvc := app.NewEntryRefService(store.EntryLinks, store.Entries)
 	contextSvc := app.NewContextService(store.Entries, store.Projects, store.Series, store.Workflows, store.Artifacts, entrySvc)
-	sessionSvc := app.NewSessionService(entrySvc, artifactSvc, projectSvc, store.Entries, store.Artifacts, store.Projects)
+	sessionSvc := app.NewSessionService(store, artifactSvc)
 	workflowRunSvc := app.NewWorkflowRunService(store.Workflows, store.WorkflowRuns, store.Entries)
 	entrySvc.SetWorkflowStore(store.Workflows)
 	entryVersionSvc := app.NewEntryVersionService(store.EntryVersions, store.Entries)
@@ -55,6 +61,7 @@ func TestServerInitialize(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      1,
 		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2025-06-18"}`),
 	})
 
 	if resp.Error != nil {
@@ -64,12 +71,35 @@ func TestServerInitialize(t *testing.T) {
 	if !ok {
 		t.Fatal("result is not a map")
 	}
-	if v, ok := result["protocolVersion"].(string); !ok || v != "2024-11-05" {
-		t.Errorf("protocolVersion = %v, want '2024-11-05'", result["protocolVersion"])
+	if v, ok := result["protocolVersion"].(string); !ok || v != "2025-06-18" {
+		t.Errorf("protocolVersion = %v, want '2025-06-18'", result["protocolVersion"])
 	}
 }
 
-func TestToolsListReturns24Tools(t *testing.T) {
+func TestStdioNotificationAndPing(t *testing.T) {
+	var output strings.Builder
+	s := &Server{
+		reader: bufio.NewReader(strings.NewReader(
+			"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n" +
+				"{\"jsonrpc\":\"2.0\",\"id\":\"heartbeat\",\"method\":\"ping\"}\n")),
+		writer: &output,
+	}
+	if err := s.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		ID     string         `json:"id"`
+		Result map[string]any `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(output.String()), &response); err != nil {
+		t.Fatalf("expected one JSON-RPC response, got %q: %v", output.String(), err)
+	}
+	if response.ID != "heartbeat" || response.Result == nil || len(response.Result) != 0 {
+		t.Fatalf("unexpected ping response: %s", output.String())
+	}
+}
+
+func TestToolsListReturns42Tools(t *testing.T) {
 	reg := NewToolRegistry(nil)
 	s := NewServer(reg)
 	ctx := context.Background()
@@ -100,8 +130,8 @@ func TestToolsListReturns24Tools(t *testing.T) {
 	default:
 		t.Fatalf("tools is not an array: %T", toolsRaw)
 	}
-	if toolCount != 41 {
-		t.Errorf("expected 41 tools, got %d", toolCount)
+	if toolCount != 42 {
+		t.Errorf("expected 42 tools, got %d", toolCount)
 	}
 }
 
@@ -294,6 +324,7 @@ func TestToolNamesAreCorrect(t *testing.T) {
 		"get_entry",
 		"save_artifact",
 		"get_context",
+		"save_series",
 		"compose_series",
 		"render_workflow",
 		"session_wrap",
@@ -1282,8 +1313,8 @@ func TestToolCountIncludesNewTools(t *testing.T) {
 	tools := reg.List()
 
 	// 34 existing + 5 memory tools + 2 native continuity tools.
-	if len(tools) != 41 {
-		t.Errorf("expected 41 tools, got %d", len(tools))
+	if len(tools) != 42 {
+		t.Errorf("expected 42 tools, got %d", len(tools))
 	}
 	names := make(map[string]bool)
 	for _, tool := range tools {
@@ -1312,13 +1343,17 @@ func setupMCPServicesWithStats(t *testing.T) (*ToolRegistry, *db.Store, func()) 
 	store := db.NewStore(sqlDB)
 
 	entrySvc := app.NewEntryService(store.Entries, store.Projects, store.Artifacts)
-	artifactSvc := app.NewArtifactService(store.Artifacts, store.Entries, store.Projects)
+	fileSvc, err := files.NewArtifactFileService(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactSvc := app.NewArtifactService(store.Artifacts, store.Entries, store.Projects, fileSvc)
 	workflowSvc := app.NewWorkflowService(store.Workflows)
 	seriesSvc := app.NewSeriesService(store.Series, store.Entries)
 	projectSvc := app.NewProjectService(store.Projects)
 	entryRefSvc := app.NewEntryRefService(store.EntryLinks, store.Entries)
 	contextSvc := app.NewContextService(store.Entries, store.Projects, store.Series, store.Workflows, store.Artifacts, entrySvc)
-	sessionSvc := app.NewSessionService(entrySvc, artifactSvc, projectSvc, store.Entries, store.Artifacts, store.Projects)
+	sessionSvc := app.NewSessionService(store, artifactSvc)
 	workflowRunSvc := app.NewWorkflowRunService(store.Workflows, store.WorkflowRuns, store.Entries)
 	saveResultSvc := app.NewSavePromptResultService(store.Entries, store.Projects, store.Artifacts)
 	statsSvc := app.NewStatsService(store.Entries, store.Artifacts, store.Projects).WithWorkflowRunStore(store.WorkflowRuns)
@@ -2042,8 +2077,8 @@ func TestCompatEngramMCP(t *testing.T) {
 
 	// Tool count should be 39 + 5 = 44
 	tools := reg.List()
-	if len(tools) != 46 {
-		t.Errorf("expected 46 tools with compatEngram enabled, got %d", len(tools))
+	if len(tools) != 47 {
+		t.Errorf("expected 47 tools with compatEngram enabled, got %d", len(tools))
 	}
 
 	// Verify mem_save

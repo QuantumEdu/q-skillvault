@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -27,6 +29,29 @@ func setupPackExportService(t *testing.T) (*VaultPackExportService, *db.Store, f
 	return exportSvc, store, cleanup
 }
 
+func TestApplyPrefixPrefersExactIDs(t *testing.T) {
+	data := domain.VaultData{
+		Entries: []domain.Entry{
+			{ID: "first", Slug: "first"},
+			{ID: "second", Slug: "first"},
+			{ID: "routing", Type: domain.EntryTypeRouting, BodyOptional: "scenario:\n  skill: first\n  workflow: plan\n"},
+		},
+		Workflows: []domain.Workflow{
+			{ID: "plan", Slug: "plan"},
+			{ID: "other", Slug: "plan"},
+		},
+		WorkflowSteps: []domain.WorkflowStep{{EntrySlug: "first", WorkflowID: "plan"}},
+	}
+	applyPrefix("copy/", &data)
+	if step := data.WorkflowSteps[0]; step.EntrySlug != "copy/first" || step.WorkflowID != "copy/plan" {
+		t.Fatalf("incorrect prefixed workflow step: %+v", step)
+	}
+	body := data.Entries[2].BodyOptional
+	if !strings.Contains(body, "skill: copy/first") || !strings.Contains(body, "workflow: copy/plan") {
+		t.Fatalf("incorrect prefixed routing entry: %s", body)
+	}
+}
+
 func TestPackExportRoundTrip(t *testing.T) {
 	exportSvc, store, cleanup := setupPackExportService(t)
 	defer cleanup()
@@ -46,6 +71,12 @@ func TestPackExportRoundTrip(t *testing.T) {
 
 	// Export to a pack file.
 	packPath := t.TempDir() + "/test.svpack"
+	if err := os.WriteFile(packPath, []byte("previous export"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(packPath, 0644); err != nil {
+		t.Fatal(err)
+	}
 	if err := exportSvc.ExportPack(ctx, ExportPackInput{
 		Author:      "test-author",
 		Version:     "1.0.0",
@@ -53,6 +84,13 @@ func TestPackExportRoundTrip(t *testing.T) {
 		OutputPath:  packPath,
 	}); err != nil {
 		t.Fatalf("ExportPack failed: %v", err)
+	}
+	info, err := os.Stat(packPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Fatalf("export permissions = %o, want 0600", info.Mode().Perm())
 	}
 
 	// Verify the file is valid JSON with pack metadata.
@@ -90,6 +128,96 @@ func TestPackExportRoundTrip(t *testing.T) {
 	}
 	if result.Entry.Title != "Test Entry" {
 		t.Errorf("imported title = %q, want 'Test Entry'", result.Entry.Title)
+	}
+}
+
+func TestPackExportUpdatesSymlinkDestination(t *testing.T) {
+	exportSvc, _, cleanup := setupPackExportService(t)
+	defer cleanup()
+	dir := t.TempDir()
+	target := filepath.Join(dir, "old.svpack")
+	if err := os.WriteFile(target, []byte("previous export"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "export.svpack")
+	if err := os.Symlink(filepath.Base(target), link); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	checkExport := func(t *testing.T) {
+		t.Helper()
+		if err := exportSvc.ExportPack(context.Background(), ExportPackInput{OutputPath: link}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Readlink(link); err != nil {
+			t.Fatalf("export path must remain a symlink: %v", err)
+		}
+		data, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !json.Valid(data) {
+			t.Fatal("symlink destination was not updated with the pack")
+		}
+		info, err := os.Stat(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+			t.Fatalf("export permissions = %o, want 0600", info.Mode().Perm())
+		}
+	}
+	t.Run("existing destination", checkExport)
+	t.Run("new destination", func(t *testing.T) {
+		if err := os.Remove(target); err != nil {
+			t.Fatal(err)
+		}
+		checkExport(t)
+	})
+}
+
+func TestPrivateExportUsesNativeDirectoryResolution(t *testing.T) {
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "other", "nested")
+	if err := os.MkdirAll(nested, 0700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "directory-link")
+	if err := os.Symlink(nested, link); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	separator := string(os.PathSeparator)
+	path := link + separator + ".." + separator + "export.json"
+	if err := os.WriteFile(path, []byte("old"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePrivateExport(path, []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "new" {
+		t.Fatalf("export read via the original path = %q, %v", data, err)
+	}
+}
+
+func TestPrivateExportSupportsLongPaths(t *testing.T) {
+	dir := t.TempDir()
+	for range 4 {
+		dir = filepath.Join(dir, strings.Repeat("d", 70))
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "export.json")
+	if err := writePrivateExport(path, []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "new" {
+		t.Fatalf("long-path export = %q, %v", data, err)
 	}
 }
 
@@ -159,8 +287,10 @@ func TestPackImportWithPrefix(t *testing.T) {
 	if len(exported.Data.EntryVersions) != 1 || exported.Data.EntryVersions[0].EntryID != "ns/pref-entry" || !strings.HasPrefix(exported.Data.EntryVersions[0].VersionID, "ns/") {
 		t.Fatalf("pack lost namespaced history: %+v", exported.Data.EntryVersions)
 	}
-	// The original slug is unchanged, so Get by unprefixed string still
-	// works (it matches the slug). Verify the ID is correctly prefixed.
+	// Both identifiers are scoped to the imported namespace.
+	if result.Entry.Slug != "ns/pref-entry" {
+		t.Fatalf("prefixed slug = %q", result.Entry.Slug)
+	}
 	if result.Entry.ID != "ns/pref-entry" {
 		t.Errorf("expected prefixed ID 'ns/pref-entry', got %q", result.Entry.ID)
 	}

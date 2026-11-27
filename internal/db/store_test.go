@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -81,12 +80,4 @@ func TestStoreInterfacesCompile(t *testing.T) {
 	var _ SearchStore = (*sqliteSearchStore)(nil)
 	var _ ImportExportStore = (*sqliteImportExportStore)(nil)
 
-	s := &Store{}
-	if s == nil {
-		t.Fatal("Store should not be nil")
-	}
 }
-
-type mockSearchStore struct{}
-
-func (m *mockSearchStore) RebuildFTS(ctx context.Context) error { return nil }

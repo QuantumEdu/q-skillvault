@@ -7,9 +7,13 @@ import (
 	"time"
 
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 func (s *sqliteWorkflowRunStore) CreateRun(ctx context.Context, run domain.WorkflowRun, steps []domain.WorkflowRunStep) error {
+	if err := security.RejectSecrets(run.Input, run.Output); err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -132,6 +136,9 @@ func (s *sqliteWorkflowRunStore) ListRuns(ctx context.Context, workflowID string
 }
 
 func (s *sqliteWorkflowRunStore) UpdateStepStatus(ctx context.Context, stepID string, status domain.RunStatus, output string) error {
+	if err := security.RejectSecrets(output); err != nil {
+		return err
+	}
 	now := time.Now()
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE run_steps SET status = ?, output = ?, finished_at = ? WHERE id = ?
@@ -143,6 +150,9 @@ func (s *sqliteWorkflowRunStore) UpdateStepStatus(ctx context.Context, stepID st
 }
 
 func (s *sqliteWorkflowRunStore) UpdateRunStatus(ctx context.Context, runID string, status domain.RunStatus, output string) error {
+	if err := security.RejectSecrets(output); err != nil {
+		return err
+	}
 	now := time.Now()
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE runs SET status = ?, output = ?, finished_at = ? WHERE id = ?

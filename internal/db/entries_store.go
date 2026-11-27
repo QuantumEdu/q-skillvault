@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 func parseSQLiteTime(s string) (time.Time, error) {
@@ -40,8 +41,30 @@ func (s *sqliteEntryStore) Save(ctx context.Context, entry domain.Entry, tags []
 	return tx.Commit()
 }
 
-func (s *sqliteEntryStore) saveEntryTx(ctx context.Context, tx *sql.Tx, entry domain.Entry, tags []string) error {
+// SaveSessionWithArtifact commits the session and both sides of its artifact link.
+func (s *Store) SaveSessionWithArtifact(ctx context.Context, entry domain.Entry, artifact domain.Artifact) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	entries := sqliteEntryStore{db: s.db}
+	if err := entries.saveEntryTx(ctx, tx, entry, nil); err != nil {
+		return err
+	}
+	if err := saveArtifact(ctx, tx, artifact); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE entries SET artifact_id = ? WHERE id = ?", artifact.ID, entry.ID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
+func (s *sqliteEntryStore) saveEntryTx(ctx context.Context, tx *sql.Tx, entry domain.Entry, tags []string) error {
+	if err := security.RejectSecrets(entry.ID, entry.Title, entry.Slug, entry.Summary, entry.BodyOptional, entry.ExternalRef, strings.Join(tags, "\n")); err != nil {
+		return err
+	}
 	projectID := interface{}(nil)
 	if entry.ProjectID != nil {
 		projectID = *entry.ProjectID
@@ -222,7 +245,7 @@ func readEntry(ctx context.Context, reader entryReader, id string, includeArchiv
 	}
 
 	if !includeArchived && result.Entry.Status == domain.StatusArchived {
-		return result, fmt.Errorf("archived: entry %q exists but is archived. Retry with include_archived=true.", id)
+		return result, fmt.Errorf("archived: entry %q exists but is archived. retry with include_archived=true", id)
 	}
 
 	tagRows, err := reader.QueryContext(ctx, "SELECT tag FROM entry_tags WHERE entry_id = ? ORDER BY tag", result.Entry.ID)

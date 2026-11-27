@@ -60,9 +60,7 @@ func ParseSaveResultFlags(args []string) (*SaveResultFlags, error) {
 
 	// Parse comma-separated tags (raw — normalization happens in service layer)
 	if tagsRaw != "" {
-		for _, t := range strings.Split(tagsRaw, ",") {
-			flags.Tags = append(flags.Tags, t)
-		}
+		flags.Tags = append(flags.Tags, strings.Split(tagsRaw, ",")...)
 	}
 
 	return flags, nil

@@ -6,6 +6,7 @@ import "context"
 // command-line argument slice (including the program name and command).
 func Run(cmd string, args []string) {
 	svc := OpenVault()
+	defer svc.Close()
 	ctx := context.Background()
 
 	switch cmd {

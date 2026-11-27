@@ -7,6 +7,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 const defaultListen = "127.0.0.1:7340"
@@ -117,7 +120,11 @@ func ListenAndServe(ctx context.Context, addr string, handler http.Handler) erro
 	if host != "127.0.0.1" && host != "localhost" && host != "::1" {
 		return fmt.Errorf("line serve: refuses non-loopback address %q (must be 127.0.0.1)", addr)
 	}
-	server := &http.Server{Addr: addr, Handler: handler}
+	server := &http.Server{
+		Addr: addr, Handler: security.LoopbackHTTP(handler),
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second,
+		IdleTimeout: 60 * time.Second,
+	}
 	go func() {
 		<-ctx.Done()
 		_ = server.Close()

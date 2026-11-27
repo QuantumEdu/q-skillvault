@@ -153,7 +153,7 @@ func TestAC2_SaveAndSearchEntryByTitleBodyTag(t *testing.T) {
 // Given a long PDF analysis is saved, then content is stored as a file
 // and DB stores metadata, summary, hash, and file path.
 func TestAC3_SaveLongArtifact(t *testing.T) {
-	store, _, artSvc, _, _, projectSvc, _, _, _, _, cleanup := setupAppServices(t)
+	_, _, artSvc, _, _, projectSvc, _, _, _, _, cleanup := setupAppServices(t)
 	defer cleanup()
 	ctx := context.Background()
 
@@ -161,8 +161,7 @@ func TestAC3_SaveLongArtifact(t *testing.T) {
 
 	longAnalysis := strings.Repeat("This is a detailed PDF analysis of the forensic digital report. ", 2000)
 
-	artSvc2 := NewArtifactService(store.Artifacts, store.Entries, store.Projects)
-	artifact, err := artSvc2.SaveArtifact(ctx, SaveArtifactInput{
+	artifact, err := artSvc.SaveArtifact(ctx, SaveArtifactInput{
 		Title:   "Forense Digital PDF Analysis",
 		Type:    "pdf_analysis",
 		Content: longAnalysis,

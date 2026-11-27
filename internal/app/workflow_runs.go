@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -67,7 +68,6 @@ func (s *WorkflowRunService) RunPipeline(
 	for _, step := range steps {
 		if step.EntrySlug == "" {
 			// Renderable-only step, skip during execution
-			resolved = append(resolved, resolvedStep{step: step})
 			continue
 		}
 		entryResult, err := s.entryStore.Get(ctx, step.EntrySlug, false)
@@ -79,6 +79,10 @@ func (s *WorkflowRunService) RunPipeline(
 			entryID: entryResult.Entry.ID,
 			body:    entryResult.Entry.BodyOptional,
 		})
+	}
+
+	if len(resolved) == 0 {
+		return nil, "", fmt.Errorf("workflow %q has no executable steps; use render-workflow for checklists", workflowSlug)
 	}
 
 	// Create run
@@ -93,10 +97,6 @@ func (s *WorkflowRunService) RunPipeline(
 
 	var runSteps []domain.WorkflowRunStep
 	for _, rs := range resolved {
-		if rs.entryID == "" {
-			// Renderable-only step, no run step needed
-			continue
-		}
 		stepID := int64(0)
 		if rs.step.ID != "" {
 			fmt.Sscanf(rs.step.ID, "%d", &stepID)
@@ -121,23 +121,8 @@ func (s *WorkflowRunService) RunPipeline(
 	var previousOutput string
 	var finalOutputParts []string
 
-	for _, rs := range resolved {
-		if rs.entryID == "" {
-			// Renderable-only step, skip
-			continue
-		}
-
-		// Find corresponding run step
-		var currentRunStep *domain.WorkflowRunStep
-		for j := range runSteps {
-			if runSteps[j].EntryID == rs.entryID {
-				currentRunStep = &runSteps[j]
-				break
-			}
-		}
-		if currentRunStep == nil {
-			continue
-		}
+	for i, rs := range resolved {
+		currentRunStep := &runSteps[i]
 
 		// Update step to running
 		if err := s.workflowRunStore.UpdateStepStatus(ctx, currentRunStep.ID, domain.RunStatusRunning, ""); err != nil {
@@ -197,8 +182,9 @@ func (s *WorkflowRunService) RunPipeline(
 
 		// Update step with response
 		if err := s.workflowRunStore.UpdateStepStatus(ctx, currentRunStep.ID, domain.RunStatusCompleted, response); err != nil {
-			s.workflowRunStore.UpdateRunStatus(ctx, runID, domain.RunStatusFailed, err.Error())
-			return nil, "", fmt.Errorf("step %q: update completed: %w", rs.step.Title, err)
+			stepErr := s.workflowRunStore.UpdateStepStatus(ctx, currentRunStep.ID, domain.RunStatusFailed, "")
+			runErr := s.workflowRunStore.UpdateRunStatus(ctx, runID, domain.RunStatusFailed, "")
+			return nil, "", fmt.Errorf("step %q: update completed: %w", rs.step.Title, errors.Join(err, stepErr, runErr))
 		}
 
 		previousOutput = response
@@ -245,7 +231,6 @@ func (s *WorkflowRunService) RunPipelineStructured(
 	var resolved []resolvedStep
 	for _, step := range steps {
 		if step.EntrySlug == "" {
-			resolved = append(resolved, resolvedStep{step: step})
 			continue
 		}
 		entryResult, err := s.entryStore.Get(ctx, step.EntrySlug, false)
@@ -257,6 +242,10 @@ func (s *WorkflowRunService) RunPipelineStructured(
 			entryID: entryResult.Entry.ID,
 			body:    entryResult.Entry.BodyOptional,
 		})
+	}
+
+	if len(resolved) == 0 {
+		return nil, fmt.Errorf("workflow %q has no executable steps", workflowRef)
 	}
 
 	// Create run
@@ -272,9 +261,6 @@ func (s *WorkflowRunService) RunPipelineStructured(
 	var runSteps []domain.WorkflowRunStep
 	structuredSteps := make([]domain.StructuredStepResult, 0, len(resolved))
 	for _, rs := range resolved {
-		if rs.entryID == "" {
-			continue
-		}
 		stepID := int64(0)
 		if rs.step.ID != "" {
 			fmt.Sscanf(rs.step.ID, "%d", &stepID)
@@ -306,13 +292,7 @@ func (s *WorkflowRunService) RunPipelineStructured(
 	anyFailed := false
 
 	for i, rs := range resolved {
-		if rs.entryID == "" {
-			continue
-		}
 
-		if i >= len(structuredSteps) {
-			continue
-		}
 		currentStep := &structuredSteps[i]
 
 		// Update step to running
@@ -354,9 +334,9 @@ func (s *WorkflowRunService) RunPipelineStructured(
 
 		// Update step with response
 		if err := s.workflowRunStore.UpdateStepStatus(ctx, runSteps[i].ID, domain.RunStatusCompleted, response); err != nil {
-			s.workflowRunStore.UpdateRunStatus(ctx, runID, domain.RunStatusFailed, err.Error())
+			stepErr := s.workflowRunStore.UpdateStepStatus(ctx, runSteps[i].ID, domain.RunStatusFailed, "")
 			currentStep.Status = domain.RunStatusFailed
-			currentStep.Error = err.Error()
+			currentStep.Error = errors.Join(err, stepErr).Error()
 			anyFailed = true
 			break
 		}

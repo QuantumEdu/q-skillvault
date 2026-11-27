@@ -1,6 +1,6 @@
 ---
 name: q:skillvault
-description: "Trigger: /q-skillvault, /skillvault, skillvault, q-skillvault, vault de skills, knowledge vault, base de conocimiento, line factory, mcp skillvault, context bundle, mem promote, episodic memory, semantic graph. Runtime de conocimiento local-first de 8 capas para desarrolladores y agentes IA: Memoria Episódica soberana (dedupe O(1) + supersesión + ciclo de vida), Compilador de Contexto en 7 modos, Workflows y Pipelines, Productividad/Handoffs, Telemetría Agéntica, Seguridad/Secretos, Almacenamiento Híbrido SQLite+FTS5, servidor MCP stdio (41 herramientas nativas; 46 con compatibilidad Engram), fábrica issue-to-PR (line) y grafo semántico de conocimiento."
+description: "Trigger: /q-skillvault, /skillvault, skillvault, q-skillvault, vault de skills, knowledge vault, base de conocimiento, line factory, mcp skillvault, context bundle, mem promote, episodic memory, semantic graph. Runtime de conocimiento local-first de 8 capas para desarrolladores y agentes IA: Memoria Episódica soberana (dedupe O(1) + supersesión + ciclo de vida), Compilador de Contexto en 7 modos, Workflows y Pipelines, Productividad/Handoffs, Telemetría Agéntica, Seguridad/Secretos, Almacenamiento Híbrido SQLite+FTS5, servidor MCP stdio (42 herramientas nativas; 47 con compatibilidad Engram), fábrica issue-to-PR (line) y grafo semántico de conocimiento."
 version: 3.8.0
 license: MIT
 metadata:
@@ -129,7 +129,7 @@ skillvault cmd search "ffmpeg"      # Búsqueda FTS5 en recetas y comandos
 skillvault cmd list                 # Listado de comandos y sus placeholders
 
 # Sincronización bidireccional y respaldo multi-máquina (Sync & Backup)
-skillvault-sync status              # Estado y diferencias local vs GitHub (skill-vault-backp)
+skillvault-sync status              # Estado y diferencias con el remoto configurado
 skillvault-sync sync                # Sincronización completa (Pull + Merge LWW + Apply + Push)
 skillvault-sync snapshot            # Snapshot atómico (VACUUM INTO) y subida a GitHub
 skillvault-sync pull                # Descargar últimos commits remotos

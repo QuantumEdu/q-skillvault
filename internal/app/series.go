@@ -48,29 +48,19 @@ func (s *SeriesService) SaveSeries(ctx context.Context, input SaveSeriesInput) (
 		Status:      status,
 	}
 
-	if err := s.seriesStore.Save(ctx, ser); err != nil {
-		return nil, fmt.Errorf("save series: %w", err)
+	entries := make([]domain.SeriesEntry, 0, len(input.EntryIDs))
+	for i, eid := range input.EntryIDs {
+		entry, err := s.entryStore.Get(ctx, eid, false)
+		if err != nil {
+			return nil, fmt.Errorf("entry %q at index %d: %w", eid, i, err)
+		}
+		if err := domain.ValidateSeriesScope(nil, entry.Entry.ProjectID); err != nil {
+			return nil, fmt.Errorf("scope validation for entry %s: %w", eid, err)
+		}
+		entries = append(entries, domain.SeriesEntry{SeriesID: ser.ID, EntryID: entry.Entry.ID, OrderIndex: i + 1})
 	}
-
-	if len(input.EntryIDs) > 0 {
-		entries := make([]domain.SeriesEntry, 0, len(input.EntryIDs))
-		for i, eid := range input.EntryIDs {
-			entry, err := s.entryStore.Get(ctx, eid, true)
-			if err != nil {
-				return nil, fmt.Errorf("entry %q at index %d: %w", eid, i, err)
-			}
-			if err := domain.ValidateSeriesScope(nil, entry.Entry.ProjectID); err != nil {
-				return nil, fmt.Errorf("scope validation for entry %s: %w", eid, err)
-			}
-			entries = append(entries, domain.SeriesEntry{
-				SeriesID:   ser.ID,
-				EntryID:    eid,
-				OrderIndex: i + 1,
-			})
-		}
-		if err := s.seriesStore.ReplaceSeriesEntries(ctx, ser.ID, entries); err != nil {
-			return nil, fmt.Errorf("set series entries: %w", err)
-		}
+	if err := s.seriesStore.SaveWithEntries(ctx, ser, entries); err != nil {
+		return nil, fmt.Errorf("save series: %w", err)
 	}
 
 	return &ser, nil

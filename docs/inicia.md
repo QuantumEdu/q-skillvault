@@ -118,12 +118,13 @@ ln -sf ~/tools/skillvault ~/tools/mcp
 Para verificar que MCP funciona:
 
 ```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"list_projects","params":{}}' | skillvault mcp
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}' | skillvault mcp
 ```
 
 ## 9. Usar REST API
 
 ```bash
+# Define SKILLVAULT_HTTP_API_KEY antes de iniciar el servidor.
 skillvault http
 ```
 
@@ -132,6 +133,7 @@ En otra terminal:
 ```bash
 curl http://127.0.0.1:7438/health
 curl -X POST http://127.0.0.1:7438/entries \
+  -H "Authorization: Bearer ${SKILLVAULT_HTTP_API_KEY}" \
   -H 'Content-Type: application/json' \
   -d '{"title":"Test","type":"skill","summary":"desde API"}'
 ```

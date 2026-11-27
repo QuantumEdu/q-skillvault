@@ -118,7 +118,7 @@ func (s *VectorService) ReindexAll(ctx context.Context) (int, error) {
 			continue // already embedded
 		}
 
-		text := buildEntryText(domain.EntryResult{Entry: e.Entry, Tags: e.Tags})
+		text := buildEntryText(domain.EntryResult(e))
 		emb, err := vector.Embed(text, s.vectors)
 		if err != nil || emb == nil {
 			continue

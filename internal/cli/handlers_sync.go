@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/quantum-6/skillvault/internal/api"
 	"github.com/quantum-6/skillvault/internal/sync"
@@ -68,17 +70,18 @@ func runSync(ctx context.Context, cmd string, svc *Services, args []string) {
 }
 
 func runHTTPServer(ctx context.Context, svc *Services, args []string) {
-	apiKey := ""
-	for i, a := range args[2:] {
-		if a == "--api-key" && i+1 < len(args[2:]) {
-			apiKey = args[2+i+1]
-		}
+	flags := flag.NewFlagSet("http", flag.ExitOnError)
+	apiKey := flags.String("api-key", os.Getenv("SKILLVAULT_HTTP_API_KEY"), "bearer token (defaults to SKILLVAULT_HTTP_API_KEY)")
+	flags.Parse(args[2:])
+	if strings.TrimSpace(*apiKey) == "" {
+		PrintError(fmt.Errorf("set SKILLVAULT_HTTP_API_KEY or pass --api-key"))
+		os.Exit(1)
 	}
 	srv := api.NewServer("127.0.0.1", 7438,
 		svc.entrySvc, svc.artifactSvc, svc.contextSvc,
 		svc.projectSvc, svc.sessionSvc, svc.workflowSvc,
 		svc.exportSvc, svc.importSvc,
-	).WithAPIKey(apiKey)
+	).WithAPIKey(*apiKey)
 	fmt.Fprintf(os.Stderr, "[sk-vault] HTTP API server starting on 127.0.0.1:7438\n")
 	if err := srv.Start(); err != nil {
 		log.Fatal(err)

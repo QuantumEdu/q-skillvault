@@ -3,11 +3,11 @@
 ## Installation
 
 ```bash
-# Prerequisites: Go 1.26+
+# Prerequisites: Go 1.26.11+
 git clone https://github.com/QuantumEdu/q-skillvault.git
 cd q-skillvault
 
-# Build and install (single binary, no CGO, ~7 MB)
+# Build and install (single binary, no CGO)
 make install
 
 # Or install the full suite (skillvault + line factory + telemetry + q-secrets)

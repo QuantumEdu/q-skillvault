@@ -310,7 +310,7 @@ skillvault save-artifact \
 |------|----------|-------------|
 | `--title` | ✅ | Artifact title |
 | `--type` | ✅ | Type: `pdf_analysis`, `spec_doc`, `architecture_doc`, `research_note`, `prompt_response`, `ai_output`, `raw_document`, `report`, `log_analysis`, `generated_code` |
-| `--content` | ✅ | Content (stored in `~/.skillvault/objects/YYYY/MM/`) |
+| `--content` or `--file` | ✅ | Inline content or a local source file. The vault stores its own copy in `objects/YYYY/MM/`. |
 | `--project` | ❌ | Associated project |
 | `--tags` | ❌ | Tags |
 
@@ -336,6 +336,8 @@ skillvault get-context \
 | `--max-chars` | ❌ | Max characters (default: 12000) |
 | `--include` | ❌ | Filter specific sections (comma-separated) |
 | `--query` | ❌ | Additional query to filter entries |
+
+Pass `--include decisions,archived` to list archived entries in their own section. The default context excludes archived entries.
 
 ### Context Modes
 
@@ -440,7 +442,7 @@ JSON format:
   "id": "spec-plan-task",
   "name": "Spec → Plan → Task",
   "steps": [
-    {"order": 1, "description": "Write spec", "type": "prompt"},
+    {"order": 1, "description": "Write spec", "entry_slug": "spec-prompt"},
     {"order": 2, "description": "Review with team"},
     {"order": 3, "description": "Create tasks"}
   ]
@@ -448,6 +450,8 @@ JSON format:
 ```
 
 ---
+
+The JSON `id` sets the workflow slug. Use `render-workflow spec-plan-task` to see all steps. For `run`, at least one step must reference a vault entry through `entry_slug`. The example assumes `spec-prompt` already exists.
 
 ## `import-workflow`
 
@@ -826,7 +830,7 @@ Import a vault from a JSON file or skill pack (`.svpack`).
 skillvault import backup.json
 ```
 
-Resolves slug conflicts automatically (appends numeric suffix to duplicates).
+Adds a suffix when an imported entry or project slug conflicts with a different existing ID.
 
 ### Skill pack import
 
@@ -836,8 +840,9 @@ skillvault import my-pack.svpack --pack --prefix ns/
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--pack` | ❌ | Import as a skill pack |
-| `--prefix` | ❌ | Prefix all imported entity IDs (e.g. `ns/`) |
+| `--pack` | ❌ | Require a skill pack envelope |
+| `--strict-audit` | ❌ | Reject the import if the audit reports critical or high findings |
+| `--prefix` | ❌ | Namespace imported IDs and slugs (e.g. `ns/`) and update internal references |
 
 When `--pack` is used with `--prefix`, imported entries are namespaced to avoid collisions with existing vault content.
 
@@ -965,15 +970,16 @@ skillvault update --repo /opt/kbs --install-path ~/tools/skillvault
 Start the HTTP REST API server.
 
 ```bash
+# Set SKILLVAULT_HTTP_API_KEY in the environment first.
 skillvault http
-# Serves on http://127.0.0.1:7438
+curl -H "Authorization: Bearer ${SKILLVAULT_HTTP_API_KEY}" http://127.0.0.1:7438/entries
 ```
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--api-key` | ❌ | API key for HTTP Basic authentication |
+| `--api-key` | ❌ | Bearer token, required when `SKILLVAULT_HTTP_API_KEY` is unset |
 
-Endpoints: health, entries CRUD, artifacts, context, projects, sessions, workflows, export/import. See [`docs/quickstart.md`](quickstart.md) or [`docs/architecture.md`](architecture.md) for details.
+The server listens on loopback. `GET /health` is public. All other endpoints require a Bearer token, and POST requests require `Content-Type: application/json`. See [`docs/quickstart.md`](quickstart.md) or [`docs/architecture.md`](architecture.md) for details.
 
 ---
 

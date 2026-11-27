@@ -524,6 +524,26 @@ def cmd_pull(cfg):
     print("\033[1;32m[skillvault-sync]\033[0m Pull completado.\n")
 
 
+def utc_timestamp(value):
+    """Compare SQLite and ISO timestamps as UTC instants."""
+    if value:
+        try:
+            stamp = value[:-1] + "+00:00" if value.endswith("Z") else value
+            # Python 3.10 requires exactly three or six fractional digits.
+            stamp = re.sub(
+                r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})[.,]([0-9]+)",
+                lambda match: match[1] + "." + match[2][:6].ljust(6, "0"),
+                stamp,
+            )
+            parsed = datetime.datetime.fromisoformat(stamp)
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=datetime.timezone.utc)
+            return parsed.astimezone(datetime.timezone.utc)
+        except (ValueError, OverflowError):
+            pass
+    return datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+
+
 def unify_databases(local_db_path, remote_db_path, output_path):
     """
     Bidirectionally merges local and remote databases into output_path using Last-Write-Wins (LWW)
@@ -570,7 +590,7 @@ def unify_databases(local_db_path, remote_db_path, output_path):
         else:
             # Existing project in both: compare updated_at
             local_uat = conn.execute("SELECT updated_at FROM projects WHERE id = ?", (pid,)).fetchone()[0] or ""
-            if (uat or "") > (local_uat or ""):
+            if utc_timestamp(uat) > utc_timestamp(local_uat):
                 conn.execute("""
                     UPDATE projects SET name=?, description=?, status=?, updated_at=?
                     WHERE id = ?
@@ -628,7 +648,7 @@ def unify_databases(local_db_path, remote_db_path, output_path):
         else:
             # Exists in both: compare updated_at
             local_uat, _ = local_entry_map[eid]
-            if (uat or "") > (local_uat or ""):
+            if utc_timestamp(uat) > utc_timestamp(local_uat):
                 # Remote is newer: update local record
                 if project_id and project_id not in existing_pids:
                     project_id = None

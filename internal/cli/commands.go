@@ -447,10 +447,11 @@ type EntryHistoryFlags struct {
 // ParseEntryHistoryFlags parses the entry ID from positional args.
 // Usage: skillvault entry history <id>
 func ParseEntryHistoryFlags(args []string) (*EntryHistoryFlags, error) {
-	if len(args) < 4 {
+	args = NormalizeArgs(args)
+	if len(args) < 3 || strings.HasPrefix(args[2], "-") {
 		return nil, fmt.Errorf("entry ID is required")
 	}
-	return &EntryHistoryFlags{ID: args[3]}, nil
+	return &EntryHistoryFlags{ID: args[2]}, nil
 }
 
 // EntryRestoreFlags holds the entry ID and version number for entry restore.
@@ -462,18 +463,19 @@ type EntryRestoreFlags struct {
 // ParseEntryRestoreFlags parses entry restore flags from args.
 // Usage: skillvault entry restore <id> --version N
 func ParseEntryRestoreFlags(args []string) (*EntryRestoreFlags, error) {
-	if len(args) < 4 {
+	args = NormalizeArgs(args)
+	if len(args) < 3 || strings.HasPrefix(args[2], "-") {
 		return nil, fmt.Errorf("entry ID is required")
 	}
 
-	flags := &EntryRestoreFlags{ID: args[3], Version: 0}
+	flags := &EntryRestoreFlags{ID: args[2], Version: 0}
 
 	fs := flag.NewFlagSet("entry-restore", flag.ContinueOnError)
 	fs.IntVar(&flags.Version, "version", 0, "Version number to restore (required)")
 	fs.SetOutput(&nullWriter{})
 
-	if len(args) > 4 {
-		if err := fs.Parse(args[4:]); err != nil {
+	if len(args) > 3 {
+		if err := fs.Parse(args[3:]); err != nil {
 			return nil, fmt.Errorf("parse entry restore flags: %w", err)
 		}
 	}
@@ -763,10 +765,22 @@ func ParseExportPackFlags(args []string) (*ExportPackFlags, error) {
 
 	fs.SetOutput(&nullWriter{})
 
+	var values []string
 	if len(args) > 2 {
-		if err := fs.Parse(args[2:]); err != nil {
-			return nil, fmt.Errorf("parse pack export flags: %w", err)
-		}
+		values = args[2:]
+	}
+	var positionalPath string
+	if len(values) > 0 && !strings.HasPrefix(values[0], "-") {
+		positionalPath, values = values[0], values[1:]
+	}
+	if err := fs.Parse(values); err != nil {
+		return nil, fmt.Errorf("parse pack export flags: %w", err)
+	}
+	if fs.NArg() != 0 {
+		return nil, fmt.Errorf("unexpected arguments after pack export flags")
+	}
+	if positionalPath != "" {
+		flags.OutputPath = positionalPath
 	}
 
 	if flags.Author == "" {

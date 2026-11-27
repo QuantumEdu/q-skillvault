@@ -49,6 +49,13 @@ func (s *Server) Run(ctx context.Context) error {
 			s.writeError(nil, ErrCodeParse, "Parse error: "+err.Error())
 			continue
 		}
+		if req.JSONRPC != "2.0" || req.Method == "" {
+			s.writeError(req.ID, ErrCodeInvalid, "Invalid request")
+			continue
+		}
+		if req.ID == nil {
+			continue
+		}
 
 		resp := s.handleRequest(ctx, &req)
 		s.writeResponse(resp)
@@ -59,6 +66,8 @@ func (s *Server) handleRequest(ctx context.Context, req *JSONRPCRequest) JSONRPC
 	switch req.Method {
 	case "initialize":
 		return s.handleInitialize(req)
+	case "ping":
+		return NewResult(req.ID, struct{}{})
 	case "tools/list":
 		return s.handleToolsList(req)
 	case "tools/call":
@@ -69,8 +78,20 @@ func (s *Server) handleRequest(ctx context.Context, req *JSONRPCRequest) JSONRPC
 }
 
 func (s *Server) handleInitialize(req *JSONRPCRequest) JSONRPCResponse {
+	var params struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	if len(req.Params) != 0 && json.Unmarshal(req.Params, &params) != nil {
+		return NewErrorResponse(req.ID, ErrCodeParams, "Invalid initialize params", nil)
+	}
+	protocol := params.ProtocolVersion
+	switch protocol {
+	case "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25":
+	default:
+		protocol = "2025-11-25"
+	}
 	result := map[string]interface{}{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": protocol,
 		"serverInfo": map[string]string{
 			"name":    "skillvault",
 			"version": version.Display(),

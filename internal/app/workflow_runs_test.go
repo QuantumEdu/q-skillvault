@@ -502,6 +502,39 @@ func TestRunPipelineStructuredStepFailure(t *testing.T) {
 	}
 }
 
+func TestRejectedWorkflowResponseLeavesRunAndStepFailed(t *testing.T) {
+	store, runSvc, workflowSvc, entrySvc, _, cleanup := setupRunServices(t)
+	defer cleanup()
+	ctx := context.Background()
+	if _, err := entrySvc.SaveEntry(ctx, SaveEntryInput{Title: "Audit Prompt", Type: "prompt", Summary: "Audit result", Body: "Respond to the prompt"}); err != nil {
+		t.Fatal(err)
+	}
+	wf, err := workflowSvc.SaveWorkflow(ctx, SaveWorkflowInput{Name: "Audit Workflow", Steps: []SaveWorkflowStep{
+		{OrderIndex: 1, Title: "Collect response", EntrySlug: "audit-prompt"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := "ghp_" + strings.Repeat("z", 36)
+	if _, _, err := runSvc.RunPipeline(ctx, wf.Slug, "", strings.NewReader(response+"\n"), &bytes.Buffer{}); err == nil {
+		t.Fatal("interactive run accepted the response")
+	}
+	if _, err := runSvc.RunPipelineStructured(ctx, wf.Slug, map[int]string{1: response}); err == nil {
+		t.Fatal("structured run accepted the response")
+	}
+	runs, err := store.WorkflowRuns.ListRuns(ctx, wf.ID, 10)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("expected only the interactive run to be persisted, got %+v, %v", runs, err)
+	}
+	run, steps, err := store.WorkflowRuns.GetRun(ctx, runs[0].ID)
+	if err != nil || len(steps) != 1 {
+		t.Fatalf("expected one persisted step, got %+v, %v", steps, err)
+	}
+	if run.Status != domain.RunStatusFailed || steps[0].Status != domain.RunStatusFailed || steps[0].Output != "" {
+		t.Fatal("rejected response left an unfinished run or persisted output")
+	}
+}
+
 func TestRunPipelineStructuredPreFlightEntryNotFound(t *testing.T) {
 	_, runSvc, wfSvc, _, _, cleanup := setupRunServices(t)
 	defer cleanup()

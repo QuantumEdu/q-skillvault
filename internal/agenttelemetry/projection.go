@@ -29,13 +29,6 @@ type UsageAccumulator struct {
 	totals map[string]int64
 }
 
-func tokenDimension(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
 func dimensionValue(value *int64) (int64, int) {
 	if value == nil {
 		return 0, 0

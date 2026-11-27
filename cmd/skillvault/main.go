@@ -131,7 +131,9 @@ func main() {
 		cli.RunSecrets()
 	case "tui":
 		traceCmd("tui")
-		runTUI(cli.OpenVault())
+		svc := cli.OpenVault()
+		defer svc.Close()
+		runTUI(svc)
 	default:
 		traceCmd(cmd)
 		cli.Run(cmd, os.Args)

@@ -14,6 +14,7 @@ import (
 // RunMCP starts the stdio MCP JSON-RPC server backed by the vault services.
 func RunMCP() {
 	svc := OpenVault()
+	defer svc.Close()
 
 	compatEngram := false
 	for _, arg := range os.Args {

@@ -40,8 +40,6 @@ type Services struct {
 	linkSvc         *app.LinkService
 	instructionSvc  *app.InstructionService
 	vaultMemSvc     *app.VaultMemService
-	fileSvc         *files.ArtifactFileService
-	scanner         *security.SecretScanner
 	syncSvc         *app.SyncService
 }
 
@@ -92,6 +90,9 @@ func OpenVault() *Services {
 	return openVault()
 }
 
+// Close releases the vault database.
+func (s *Services) Close() error { return s.store.Close() }
+
 func openVault() *Services {
 	sqlDB, err := db.OpenDB(dbPath())
 	if err != nil {
@@ -100,6 +101,7 @@ func openVault() *Services {
 	}
 
 	if err := db.RunMigrations(sqlDB); err != nil {
+		_ = sqlDB.Close()
 		fmt.Fprintf(os.Stderr, "error migrating database: %v\n", err)
 		os.Exit(1)
 	}
@@ -119,17 +121,16 @@ func openVault() *Services {
 		fmt.Fprintf(os.Stderr, "error creating file service: %v\n", err)
 		os.Exit(1)
 	}
-	scanner := security.New()
 
 	entrySvc := app.NewEntryService(store.Entries, store.Projects, store.Artifacts)
-	artifactSvc := app.NewArtifactService(store.Artifacts, store.Entries, store.Projects)
+	artifactSvc := app.NewArtifactService(store.Artifacts, store.Entries, store.Projects, fileSvc)
 	workflowSvc := app.NewWorkflowService(store.Workflows)
 	seriesSvc := app.NewSeriesService(store.Series, store.Entries)
 	projectSvc := app.NewProjectService(store.Projects)
 	entryRefSvc := app.NewEntryRefService(store.EntryLinks, store.Entries)
 	memoryIndexSvc := app.NewMemoryIndexService(store.Entries, store.Projects, entryRefSvc)
 	contextSvc := app.NewContextService(store.Entries, store.Projects, store.Series, store.Workflows, store.Artifacts, entrySvc)
-	sessionSvc := app.NewSessionService(entrySvc, artifactSvc, projectSvc, store.Entries, store.Artifacts, store.Projects)
+	sessionSvc := app.NewSessionService(store, artifactSvc)
 	exportSvc := app.NewVaultExportService(store.ImportExport, store.Artifacts, store.Entries, store.Projects, store.Workflows)
 	importSvc := app.NewVaultImportService(store.ImportExport, store.Entries, store.Projects, store.Artifacts)
 	auditor := security.NewAuditor()
@@ -192,8 +193,6 @@ func openVault() *Services {
 		linkSvc:         linkSvc,
 		instructionSvc:  instructionSvc,
 		vaultMemSvc:     vaultMemSvc,
-		fileSvc:         fileSvc,
-		scanner:         scanner,
 		syncSvc:         syncSvc,
 	}
 }

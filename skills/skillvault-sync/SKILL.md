@@ -2,7 +2,7 @@
 name: skillvault-sync
 description: >
   Synchronize, backup, and bidirectionally merge SkillVault SQLite databases and markdown entries across machines
-  (WSL, Windows, macOS, Linux) using the private GitHub repository https://github.com/QuantumEdu/skill-vault-backp.
+  (WSL, Windows, macOS, Linux) using a private GitHub repository you can access.
   Trigger: /skillvault-sync, sync skillvault, backup skillvault, respaldar skillvault, sincronizar skillvault.
 license: Apache-2.0
 metadata:
@@ -13,7 +13,7 @@ metadata:
 
 # SkillVault Sync & Bidirectional Merge Skill (`skillvault-sync`)
 
-Este skill proporciona respaldo automático, sincronización bidireccional y unificación con resolución de colisiones (*Last-Write-Wins* por `updated_at`) para **SkillVault** (`~/.skillvault/vault.db`), en estricta conformidad con las convenciones del repositorio privado [QuantumEdu/skill-vault-backp](https://github.com/QuantumEdu/skill-vault-backp).
+Este skill proporciona respaldo automático, sincronización bidireccional y unificación con resolución de colisiones (*Last-Write-Wins* por `updated_at`) para **SkillVault** (`~/.skillvault/vault.db`), en estricta conformidad con las convenciones del repositorio privado el repositorio privado configurado.
 
 ---
 
@@ -46,7 +46,7 @@ Ubicación:
 Variables configurables:
 ```env
 # URL del repositorio de almacenamiento
-SKILLVAULT_SYNC_REPO_URL="https://github.com/QuantumEdu/skill-vault-backp.git"
+SKILLVAULT_SYNC_REPO_URL="https://github.com/OWNER/PRIVATE-BACKUP.git"
 
 # Ubicación del clon local del repositorio de respaldo
 SKILLVAULT_SYNC_REPO_DIR="~/.local/share/skillvault-sync/repo"
@@ -106,7 +106,7 @@ Al terminar una jornada de desarrollo o invocar `/q-session-wrap`:
 ```bash
 skillvault-sync sync --note "cierre de sesion"
 ```
-Ambos extremos (tu base local y [QuantumEdu/skill-vault-backp](https://github.com/QuantumEdu/skill-vault-backp)) quedan sincronizados al 100%.
+Ambos extremos (tu base local y el repositorio privado configurado) quedan sincronizados al 100%.
 
 ### Al Cambiar de Máquina (Ej. de WSL a otra máquina)
 1. Ejecutar `skillvault-sync init` en la nueva máquina.

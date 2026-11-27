@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/quantum-6/skillvault/internal/db"
 	"github.com/quantum-6/skillvault/internal/domain"
@@ -18,10 +20,35 @@ type SaveWorkflowStep struct {
 }
 
 type SaveWorkflowInput struct {
+	ID          string
 	Name        string
 	Description string
 	Status      string
 	Steps       []SaveWorkflowStep
+}
+
+func (step *SaveWorkflowStep) UnmarshalJSON(data []byte) error {
+	type canonical SaveWorkflowStep
+	var fields struct {
+		canonical
+		Order       int    `json:"order"`
+		Description string `json:"description"`
+		EntrySlug   string `json:"entry_slug"`
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*step = SaveWorkflowStep(fields.canonical)
+	if step.OrderIndex == 0 {
+		step.OrderIndex = fields.Order
+	}
+	if step.Title == "" {
+		step.Title = fields.Description
+	}
+	if fields.EntrySlug != "" {
+		step.EntrySlug = fields.EntrySlug
+	}
+	return nil
 }
 
 type WorkflowService struct {
@@ -51,9 +78,15 @@ func (s *WorkflowService) SaveWorkflow(ctx context.Context, input SaveWorkflowIn
 		Description: input.Description,
 		Status:      status,
 	}
+	if input.ID != "" {
+		wf.Slug = slugify(input.ID)
+	}
 
 	steps := make([]domain.WorkflowStep, 0, len(input.Steps))
 	for _, s := range input.Steps {
+		if strings.TrimSpace(s.Title) == "" {
+			return nil, fmt.Errorf("step %d title is required", len(steps)+1)
+		}
 		orderIdx := s.OrderIndex
 		if orderIdx == 0 {
 			orderIdx = len(steps) + 1
@@ -82,8 +115,4 @@ func (s *WorkflowService) RenderWorkflow(ctx context.Context, id string) ([]doma
 
 func (s *WorkflowService) ListWorkflows(ctx context.Context, includeArchived bool) ([]domain.Workflow, error) {
 	return s.workflowStore.List(ctx, includeArchived)
-}
-
-func (s *WorkflowService) Get(ctx context.Context, id string) (domain.Workflow, error) {
-	return s.workflowStore.Get(ctx, id)
 }

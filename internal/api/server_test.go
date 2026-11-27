@@ -19,6 +19,8 @@ import (
 
 	"github.com/quantum-6/skillvault/internal/app"
 	"github.com/quantum-6/skillvault/internal/db"
+	"github.com/quantum-6/skillvault/internal/files"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 func setupTestServer(t *testing.T) (*Server, func()) {
@@ -34,11 +36,15 @@ func setupTestServer(t *testing.T) (*Server, func()) {
 	store := db.NewStore(sqlDB)
 
 	entrySvc := app.NewEntryService(store.Entries, store.Projects, store.Artifacts)
-	artifactSvc := app.NewArtifactService(store.Artifacts, store.Entries, store.Projects)
+	fileSvc, err := files.NewArtifactFileService(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactSvc := app.NewArtifactService(store.Artifacts, store.Entries, store.Projects, fileSvc)
 	workflowSvc := app.NewWorkflowService(store.Workflows)
 	projectSvc := app.NewProjectService(store.Projects)
 	contextSvc := app.NewContextService(store.Entries, store.Projects, store.Series, store.Workflows, store.Artifacts, entrySvc)
-	sessionSvc := app.NewSessionService(entrySvc, artifactSvc, projectSvc, store.Entries, store.Artifacts, store.Projects)
+	sessionSvc := app.NewSessionService(store, artifactSvc)
 	exportSvc := app.NewVaultExportService(store.ImportExport, store.Artifacts, store.Entries, store.Projects, store.Workflows)
 	importSvc := app.NewVaultImportService(store.ImportExport, store.Entries, store.Projects, store.Artifacts)
 
@@ -640,7 +646,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 	}
 }
 
-func TestAuthSkippedWhenNoKey(t *testing.T) {
+func TestAuthRequiredWhenNoKey(t *testing.T) {
 	srv, cleanup := setupTestServer(t)
 	defer cleanup()
 	ts := httptest.NewServer(srv.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -648,14 +654,52 @@ func TestAuthSkippedWhenNoKey(t *testing.T) {
 	})))
 	defer ts.Close()
 
-	// POST without any auth header should work when no key configured.
+	// Vault endpoints fail closed even when the server has no key.
 	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader([]byte(`{}`)))
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected 200 without auth when key unset, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 without auth when key unset, got %d", resp.StatusCode)
+	}
+}
+
+func TestLocalVaultRequestPolicy(t *testing.T) {
+	srv, cleanup := setupTestServer(t)
+	defer cleanup()
+	srv.WithAPIKey("test-key")
+	handler := security.LoopbackHTTP(srv.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})))
+	for _, tc := range []struct {
+		name, method, host, origin, key, contentType string
+		want                                         int
+	}{
+		{"anonymous vault read", "GET", "127.0.0.1:7438", "", "", "", 401},
+		{"authenticated vault read", "GET", "127.0.0.1:7438", "", "test-key", "", 204},
+		{"untrusted host", "GET", "remote.example:7438", "", "test-key", "", 403},
+		{"cross-origin write", "POST", "127.0.0.1:7438", "https://remote.example", "test-key", "application/json", 403},
+		{"non-JSON write", "POST", "127.0.0.1:7438", "", "test-key", "text/plain", 415},
+		{"authenticated write", "POST", "127.0.0.1:7438", "", "test-key", "application/json", 204},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "http://"+tc.host+"/entries", strings.NewReader("{}"))
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			if tc.key != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.key)
+			}
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.want)
+			}
+		})
 	}
 }
 
@@ -693,6 +737,7 @@ func TestAuthRequiredWhenKeySet(t *testing.T) {
 	// POST with correct key → 200.
 	req, _ = http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Authorization", "Bearer test-key-123")
+	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)

@@ -6,9 +6,18 @@ import (
 	"fmt"
 
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 func (s *sqliteWorkflowStore) Save(ctx context.Context, w domain.Workflow, steps []domain.WorkflowStep) error {
+	if err := security.RejectSecrets(w.ID, w.Slug, w.Name, w.Description); err != nil {
+		return err
+	}
+	for _, step := range steps {
+		if err := security.RejectSecrets(step.Title, step.Instruction, step.ExpectedOutput, step.EntrySlug); err != nil {
+			return err
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)

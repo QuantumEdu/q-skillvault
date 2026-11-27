@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 
 	"github.com/quantum-6/skillvault/internal/db"
@@ -57,7 +56,11 @@ func (s *SavePromptResultService) Save(ctx context.Context, input SavePromptResu
 
 	var projectID *string
 	if input.ProjectID != "" {
-		projectID = &input.ProjectID
+		id, err := resolveProjectRef(ctx, s.entries.projectStore, input.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		projectID = &id
 	}
 
 	entryID := generateResultID()
@@ -88,21 +91,6 @@ func (s *SavePromptResultService) Save(ctx context.Context, input SavePromptResu
 		Type:      string(entryType),
 		ProjectID: projOut,
 	}, nil
-}
-
-func buildVarsJSON(model, sourcePromptID string) string {
-	vars := map[string]string{}
-	if model != "" {
-		vars["model"] = model
-	}
-	if sourcePromptID != "" {
-		vars["source_prompt_id"] = sourcePromptID
-	}
-	if len(vars) == 0 {
-		return ""
-	}
-	data, _ := json.Marshal(vars)
-	return string(data)
 }
 
 func generateResultID() string {

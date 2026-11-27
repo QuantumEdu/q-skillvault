@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/quantum-6/skillvault/internal/db"
@@ -43,6 +43,11 @@ type IndexResult struct {
 // and upserts shadow entries in SkillVault.
 func (s *MemoryIndexService) Index(ctx context.Context, memDir, projectID string, parseWikilinks bool) (*IndexResult, error) {
 	result := &IndexResult{}
+	root, err := os.OpenRoot(memDir)
+	if err != nil {
+		return result, fmt.Errorf("open memory directory: %w", err)
+	}
+	defer root.Close()
 
 	// Validate project exists
 	if _, err := s.projectStore.Get(ctx, projectID); err != nil {
@@ -63,24 +68,14 @@ func (s *MemoryIndexService) Index(ctx context.Context, memDir, projectID string
 
 	var indexedIDs []string
 
-	err := filepath.Walk(memDir, func(path string, info os.FileInfo, err error) error {
+	err = fs.WalkDir(root.FS(), ".", func(rel string, info fs.DirEntry, err error) error {
 		if err != nil {
-			result.Failed++
-			result.FailedFiles = append(result.FailedFiles, path)
-			return nil // skip, don't abort walk
+			return fmt.Errorf("walk %s: %w", rel, err)
 		}
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+		if !info.Type().IsRegular() || !strings.HasSuffix(info.Name(), ".md") {
 			return nil
 		}
-
-		rel, err := filepath.Rel(memDir, path)
-		if err != nil {
-			result.Failed++
-			result.FailedFiles = append(result.FailedFiles, path)
-			return nil
-		}
-
-		content, err := os.ReadFile(path)
+		content, err := root.ReadFile(rel)
 		if err != nil {
 			result.Failed++
 			result.FailedFiles = append(result.FailedFiles, rel)
@@ -96,8 +91,8 @@ func (s *MemoryIndexService) Index(ctx context.Context, memDir, projectID string
 
 		// Determine entry type based on path
 		entryType := mapPathToType(rel)
-		isArchived := strings.Contains(rel, string(filepath.Separator)+"archive"+string(filepath.Separator)) ||
-			strings.HasPrefix(rel, "archive"+string(filepath.Separator))
+		isArchived := strings.Contains(rel, "/archive/") ||
+			strings.HasPrefix(rel, "archive/")
 
 		// Build ID from path
 		id := "pimem-" + projectID + "-" + slugifyPath(rel)
@@ -178,6 +173,9 @@ func (s *MemoryIndexService) Index(ctx context.Context, memDir, projectID string
 
 		return nil
 	})
+	if err != nil {
+		return result, fmt.Errorf("walk memory directory: %w", err)
+	}
 
 	result.Indexed = len(indexedIDs)
 
@@ -230,7 +228,7 @@ func (s *MemoryIndexService) deactivateOrphans(ctx context.Context, projectID st
 
 // mapPathToType maps a pi-memory-md relative path to an EntryType.
 func mapPathToType(rel string) domain.EntryType {
-	parts := strings.Split(rel, string(filepath.Separator))
+	parts := strings.Split(rel, "/")
 	for _, part := range parts {
 		switch {
 		case part == "archive" || part == "research":
@@ -247,7 +245,7 @@ func slugifyPath(rel string) string {
 	// Remove .md extension
 	rel = strings.TrimSuffix(rel, ".md")
 	// Replace path separators with hyphens
-	rel = strings.ReplaceAll(rel, string(filepath.Separator), "-")
+	rel = strings.ReplaceAll(rel, "/", "-")
 	// Lowercase
 	rel = strings.ToLower(rel)
 	// Replace any non-alphanumeric with hyphens

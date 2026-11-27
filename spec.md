@@ -6,6 +6,8 @@
 
 ## 0. Contexto y alcance
 
+Propuesta histórica de junio de 2026. Para los contratos actuales, consulta [los comandos](docs/commands.md) y [la arquitectura](docs/architecture.md).
+
 Este documento especifica las mejoras derivadas del análisis de código del repositorio `QuantumEdu/q-skillvault` (branch `feat/skillvault-v1-alpha`). El análisis identificó:
 
 - 3 bugs críticos que afectan runtime y compilación
@@ -29,7 +31,7 @@ Las propuestas están ordenadas por **impacto × esfuerzo**, no por categoría. 
 go 1.26
 ```
 
-**Criterio de aceptación:** `go build ./...` pasa sin advertencias de versión en Go 1.24.x estándar.
+**Criterio de aceptación:** `go build ./...` pasa sin advertencias de versión en la versión mínima declarada en `go.mod`.
 
 ---
 
@@ -39,7 +41,7 @@ go 1.26
 
 **Fix — opción A (recomendada, sin CGO):**
 ```go
-// internal/db/db.go — agregar import side-effect
+// internal/cli/deps.go — agregar import side-effect
 import (
     _ "modernc.org/sqlite"
     _ "modernc.org/sqlite/lib/fts5"
@@ -96,7 +98,7 @@ func ResolveWithCycleDetection(content string, vars map[string]string) (string, 
 
 **Fix:**
 ```go
-// cmd/entry.go — antes de pasarlo a db.Upsert
+// internal/cli/handlers_entries.go — antes de pasarlo a db.Upsert
 
 data, err := os.ReadFile(path)
 if err != nil {
@@ -145,7 +147,7 @@ CREATE INDEX IF NOT EXISTS idx_entries_series_active
 
 **Fix:**
 ```go
-// cmd/mcp.go
+// internal/cli/mcp.go
 
 func runMCPServer() error {
     ctx, cancel := context.WithCancel(context.Background())
@@ -427,7 +429,7 @@ Tu eres un experto en FastAPI...
 
 **Implementación:**
 ```go
-// cmd/serve.go — nuevo subcomando
+// internal/api/server.go — nuevo subcomando
 
 import "github.com/fsnotify/fsnotify"
 

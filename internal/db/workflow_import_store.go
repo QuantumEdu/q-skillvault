@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/quantum-6/skillvault/internal/domain"
+	"github.com/quantum-6/skillvault/internal/security"
 )
 
 // PhaseYAML represents a single phase from a workflow-builder YAML file.
@@ -42,6 +43,9 @@ type WorkflowYAML struct {
 // Returns the created Workflow, the list of entry slugs, and any error.
 // On failure the entire transaction is rolled back.
 func (s *Store) ImportWorkflowWithEntries(ctx context.Context, yamlData []byte, projectID *string) (*domain.Workflow, []string, error) {
+	if err := security.RejectSecrets(string(yamlData)); err != nil {
+		return nil, nil, err
+	}
 	var wfYAML WorkflowYAML
 	if err := yaml.Unmarshal(yamlData, &wfYAML); err != nil {
 		return nil, nil, fmt.Errorf("parse workflow YAML: %w", err)

@@ -20,9 +20,9 @@ Store, search, and retrieve prompts, skills, workflows, decisions, project memor
 
 **Status:** v3 — Workflow bridge + LifeOS taxonomy + workflow analytics + entry versioning + skill pack export + issue-to-PR factory (`line`)  
 **Versioning:** Semantic Versioning `MAJOR.MINOR.PATCH` starting at `v3.0.0` — MINOR bumps per merged feature PR, PATCH per merged fix PR, MAJOR only on breaking changes. Single source of truth: `internal/version/version.go`.  
-**Binary size:** ~7 MB  
-**Dependencies:** Zero frameworks. Only `modernc.org/sqlite`.  
-**Language:** Go 1.26+  
+**Binary size:** varies by platform and build flags
+**Dependencies:** Pure-Go SQLite, Bubble Tea, GitHub and S3 clients, OAuth2, and YAML.
+**Language:** Go 1.26.11+
 **License:** [MIT](LICENSE)
 
 ---
@@ -115,7 +115,7 @@ Generate implementation plan from spec.
 ## Installation
 
 ```bash
-# Prerequisites: Go 1.26+
+# Prerequisites: Go 1.26.11+
 git clone --recurse-submodules https://github.com/QuantumEdu/q-skillvault.git
 cd q-skillvault
 
@@ -247,10 +247,8 @@ cmd/skillvault/
 ├── internal/domain/      # Pure entities + validators
 ├── internal/db/          # SQLite + FTS5 stores + embedded migrations
 ├── internal/files/       # Artifact filesystem (objects/YYYY/MM/)
-├── internal/context/     # Qu@ntum context compiler (7 modes)
-├── internal/security/    # Secret scanner (4 regex patterns)
+├── internal/security/    # Credential detection and security audit
 ├── internal/vars/        # Variable detection + injection + frontmatter parser
-├── internal/export/      # Import/Export with conflict resolution
 └── internal/api/         # HTTP REST server
 ```
 
@@ -625,7 +623,7 @@ traversal with configurable depth. CLI: `skillvault graph --entry <id>`.
 
 ## Security
 
-SkillVault detects and blocks secrets before they enter the vault:
+SkillVault rejects content that matches known credential patterns before saving or importing it:
 
 | Pattern | Example |
 |---------|---------|
@@ -633,8 +631,10 @@ SkillVault detects and blocks secrets before they enter the vault:
 | Private keys | `-----BEGIN PRIVATE KEY-----` |
 | GitHub tokens | `ghp_...` |
 | Slack tokens | `xoxb-...`, `xoxa-...` |
+| AWS access key IDs | `AKIA...`, `ASIA...` |
+| Hardcoded bearer tokens | `Bearer ...` (25+ token chars) |
 
-On detection: content is **rejected** or **redacted** with a warning. No secrets stored.
+The import and export checks cover detected credential patterns, including historical records in snapshots. Run `skillvault audit` to inspect entries already present in a vault.
 
 ---
 
@@ -682,7 +682,7 @@ SkillVault → creates session entry + optional artifact
 | Secret detection | ❌ | ❌ | ❌ | ✅ |
 | Workflow checklists | ❌ | ❌ | ❌ | ✅ |
 | Workflow pipelines | ❌ | ❌ | ❌ | ✅ (v3) |
-| Single 10MB binary | ❌ | ❌ | ❌ | ✅ |
+| Single executable | ❌ | ❌ | ❌ | ✅ |
 | Zero cloud dependency | ✅ | ❌ | ❌ | ✅ |
 | Portable (any OS) | ✅ | ❌ | ❌ | ✅ |
 | Entry relations | ❌ | ❌ | ❌ | ✅ |
@@ -710,7 +710,7 @@ Test pyramid:
 
 ## Dependencies
 
-- **Go 1.26+** — standard library for CLI, HTTP, JSON, file I/O, crypto, embed
+- **Go 1.26.11+** — standard library for CLI, HTTP, JSON, file I/O, crypto, embed
 - **`modernc.org/sqlite`** — pure Go SQLite driver (no CGO)
 - **`telemetryd`** — Unix socket daemon for agent observability (included in repo)
 - **`telemetryctl`** — CLI for run queries and daemon status (included in repo)
