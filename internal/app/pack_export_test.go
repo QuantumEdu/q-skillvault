@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -46,6 +47,12 @@ func TestPackExportRoundTrip(t *testing.T) {
 
 	// Export to a pack file.
 	packPath := t.TempDir() + "/test.svpack"
+	if err := os.WriteFile(packPath, []byte("previous export"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(packPath, 0644); err != nil {
+		t.Fatal(err)
+	}
 	if err := exportSvc.ExportPack(ctx, ExportPackInput{
 		Author:      "test-author",
 		Version:     "1.0.0",
@@ -53,6 +60,13 @@ func TestPackExportRoundTrip(t *testing.T) {
 		OutputPath:  packPath,
 	}); err != nil {
 		t.Fatalf("ExportPack failed: %v", err)
+	}
+	info, err := os.Stat(packPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Fatalf("export permissions = %o, want 0600", info.Mode().Perm())
 	}
 
 	// Verify the file is valid JSON with pack metadata.

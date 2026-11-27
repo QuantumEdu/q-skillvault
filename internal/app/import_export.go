@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -94,11 +95,27 @@ func (s *VaultExportService) ExportVault(ctx context.Context, input ExportVaultI
 	if path == "" {
 		path = "skillvault-export.json"
 	}
-	if err := os.WriteFile(path, jsonBytes, 0600); err != nil {
+	if err := writePrivateExport(path, jsonBytes); err != nil {
 		return fmt.Errorf("write export file: %w", err)
 	}
 
 	return nil
+}
+
+func writePrivateExport(path string, data []byte) error {
+	file, err := os.CreateTemp(filepath.Dir(path), ".skillvault-export-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), path)
 }
 
 func (s *VaultImportService) Import(ctx context.Context, path string) error {

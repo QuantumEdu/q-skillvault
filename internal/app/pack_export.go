@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/quantum-6/skillvault/internal/db"
@@ -80,7 +79,7 @@ func (s *VaultPackExportService) ExportPack(ctx context.Context, input ExportPac
 	if path == "" {
 		path = "skillvault-pack.svpack"
 	}
-	if err := os.WriteFile(path, jsonBytes, 0600); err != nil {
+	if err := writePrivateExport(path, jsonBytes); err != nil {
 		return fmt.Errorf("write pack export file: %w", err)
 	}
 
